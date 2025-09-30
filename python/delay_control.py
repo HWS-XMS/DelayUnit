@@ -14,8 +14,8 @@ import argparse
 from enum import IntEnum
 
 class Command(IntEnum):
-    SET_DELAY = 0x01
-    GET_DELAY = 0x02
+    SET_COARSE = 0x01
+    GET_COARSE = 0x02
     SET_EDGE = 0x03
     GET_EDGE = 0x04
     GET_STATUS = 0x05
@@ -45,7 +45,7 @@ class DelayController:
         fine_ps = int(picoseconds % 10000)
         
         # Set coarse delay
-        self.ser.write(bytes([Command.SET_DELAY]))
+        self.ser.write(bytes([Command.SET_COARSE]))
         self.ser.write(struct.pack('<I', coarse_cycles))
         time.sleep(0.01)
         
@@ -64,7 +64,7 @@ class DelayController:
     def get_delay(self):
         """Get actual configured delay in picoseconds"""
         # Get coarse delay
-        self.ser.write(bytes([Command.GET_DELAY]))
+        self.ser.write(bytes([Command.GET_COARSE]))
         data = self.ser.read(4)
         if len(data) != 4:
             return None

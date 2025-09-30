@@ -8,8 +8,8 @@
 `define EDGE_BOTH    2'b11
 
 // Command definitions
-`define CMD_SET_DELAY    8'h01
-`define CMD_GET_DELAY    8'h02
+`define CMD_SET_COARSE   8'h01
+`define CMD_GET_COARSE   8'h02
 `define CMD_SET_EDGE     8'h03
 `define CMD_GET_EDGE     8'h04
 `define CMD_GET_STATUS   8'h05

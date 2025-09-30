@@ -22,7 +22,7 @@ all: synth
 # Vivado synthesis
 synth:
 	@echo "Synthesizing design with 20ps resolution MMCM..."
-	cd scripts/vivado && vivado -mode batch -source synth.tcl
+	vivado -mode batch -source synth.tcl
 
 # Simulation
 sim:
@@ -37,10 +37,8 @@ sim:
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -rf scripts/vivado/build
-	rm -rf scripts/vivado/*.jou
-	rm -rf scripts/vivado/*.log
-	rm -rf scripts/vivado/.Xil
+	rm -rf build
+	rm -rf *.jou *.log .Xil
 	rm -f tb/*.vvp tb/*.vcd
 	find . -name "*.pyc" -delete
 	find . -name "__pycache__" -type d -delete
@@ -51,12 +49,12 @@ install-python:
 
 # Program FPGA
 program: synth
-	@echo "Programming FPGA with MMCM bitstream..."
-	cd scripts/vivado && \
+	@echo "Programming FPGA with bitstream..."
 	echo "open_hw_manager" > program.tcl && \
 	echo "connect_hw_server" >> program.tcl && \
 	echo "open_hw_target" >> program.tcl && \
-	echo "set_property PROGRAM.FILE {build/trigger_delay_mmcm.bit} [current_hw_device]" >> program.tcl && \
+	echo "set_property PROGRAM.FILE {build/trigger_delay.bit} [current_hw_device]" >> program.tcl && \
 	echo "program_hw_devices [current_hw_device]" >> program.tcl && \
 	echo "close_hw_manager" >> program.tcl && \
-	vivado -mode batch -source program.tcl
+	vivado -mode batch -source program.tcl && \
+	rm program.tcl

@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "../trigger_delay_defs.vh"
+`include "../TRIGGER_DELAY_DEFS.vh"
 
 module TRIGGER_DELAY_ENHANCED (
     input  logic        clk,

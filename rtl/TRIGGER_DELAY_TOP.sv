@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "trigger_delay_defs.vh"
+`include "TRIGGER_DELAY_DEFS.vh"
 
 module TRIGGER_DELAY_TOP_MMCM (
     input  logic        clk,
@@ -92,8 +92,8 @@ module TRIGGER_DELAY_TOP_MMCM (
     // State machine
     typedef enum {
         STATE_IDLE,
-        STATE_SET_DELAY,
-        STATE_GET_DELAY,
+        STATE_SET_COARSE,
+        STATE_GET_COARSE,
         STATE_SET_EDGE,
         STATE_GET_EDGE,
         STATE_GET_STATUS,
@@ -163,8 +163,8 @@ module TRIGGER_DELAY_TOP_MMCM (
                     if (uart_rx_data_valid) begin
                         uart_transmission_counter <= 32'd0;
                         case (uart_rx_data)
-                            `CMD_SET_DELAY:   current_state <= STATE_SET_DELAY;
-                            `CMD_GET_DELAY:   current_state <= STATE_GET_DELAY;
+                            `CMD_SET_COARSE:  current_state <= STATE_SET_COARSE;
+                            `CMD_GET_COARSE:  current_state <= STATE_GET_COARSE;
                             `CMD_SET_EDGE:    current_state <= STATE_SET_EDGE;
                             `CMD_GET_EDGE:    current_state <= STATE_GET_EDGE;
                             `CMD_GET_STATUS:  current_state <= STATE_GET_STATUS;
@@ -176,7 +176,7 @@ module TRIGGER_DELAY_TOP_MMCM (
                     end
                 end
                 
-                STATE_SET_DELAY: begin
+                STATE_SET_COARSE: begin
                     if (uart_transmission_counter >= 4) begin
                         coarse_delay <= rx_delay_value;
                         coarse_update <= 1'b1;
@@ -194,7 +194,7 @@ module TRIGGER_DELAY_TOP_MMCM (
                     end
                 end
                 
-                STATE_GET_DELAY: begin
+                STATE_GET_COARSE: begin
                     if (uart_transmission_counter >= 4) begin
                         current_state <= STATE_IDLE;
                     end else begin

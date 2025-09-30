@@ -34,16 +34,14 @@ delay_unit/
 │   ├── mmcm/              # MMCM fine delay
 │   ├── uart/              # UART interface
 │   ├── TRIGGER_DELAY_TOP.sv
-│   └── trigger_delay_defs.vh
+│   └── TRIGGER_DELAY_DEFS.vh
 ├── tb/                    # Testbench
 │   └── MMCM_FINE_DELAY_TB.sv
-├── constraints_arty/      # Arty board constraints
+├── constraints/           # Pin constraints
 │   └── trigger_delay_arty.xdc
-├── scripts/               # Build and control scripts
-│   ├── vivado/           # Vivado synthesis
-│   │   └── synth.tcl
-│   └── python/           # Control software
-│       └── delay_control.py
+├── python/                # Control software
+│   └── delay_control.py
+├── synth.tcl             # Vivado synthesis script
 └── Makefile              # Build automation
 ```
 
@@ -56,7 +54,6 @@ delay_unit/
 make synth
 
 # Or directly with Vivado
-cd scripts/vivado
 vivado -mode batch -source synth.tcl
 ```
 
@@ -67,13 +64,13 @@ vivado -mode batch -source synth.tcl
 make program
 
 # Or manually in Vivado GUI
-# Open Hardware Manager, connect to board, program with build/trigger_delay_mmcm.bit
+# Open Hardware Manager, connect to board, program with build/trigger_delay.bit
 ```
 
 ### 3. Control via Python
 
 ```bash
-cd scripts/python
+cd python
 
 # Set delay to 25.5ns (25500ps)
 python delay_control.py set 25500
@@ -115,8 +112,8 @@ print(f"Current delay: {actual_ps}ps")
 ### Commands
 | Command | Code | Data | Description |
 |---------|------|------|-------------|
-| SET_DELAY | 0x01 | 4 bytes | Set coarse delay (cycles) |
-| GET_DELAY | 0x02 | - | Get coarse delay |
+| SET_COARSE | 0x01 | 4 bytes | Set coarse delay (cycles) |
+| GET_COARSE | 0x02 | - | Get coarse delay |
 | SET_EDGE | 0x03 | 1 byte | Set edge type (0=none, 1=rising, 2=falling, 3=both) |
 | GET_EDGE | 0x04 | - | Get edge type |
 | GET_STATUS | 0x05 | - | Get trigger count and delays |
