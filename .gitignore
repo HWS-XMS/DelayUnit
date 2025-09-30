@@ -1,8 +1,3 @@
-# Tool directories
-IceStick/arachne-pnr/
-IceStick/icestorm/
-IceStick/nextpnr/
-
 # Build directories
 build/
 scripts/vivado/build/

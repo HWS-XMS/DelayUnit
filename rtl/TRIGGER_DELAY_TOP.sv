@@ -2,7 +2,7 @@
 
 `include "trigger_delay_defs.vh"
 
-module TRIGGER_DELAY_TOP (
+module TRIGGER_DELAY_TOP_MMCM (
     input  logic        clk,
     input  logic        rst,
     input  logic        trigger_in,
@@ -50,22 +50,29 @@ module TRIGGER_DELAY_TOP (
     );
     
     // Control signals for trigger delay
-    logic [31:0] delay_cycles;
-    logic delay_update;
+    logic [31:0] coarse_delay;
+    logic coarse_update;
+    logic [15:0] fine_delay_ps;
+    logic fine_update;
     logic [1:0] edge_type;
-    logic [31:0] current_delay;
+    logic [31:0] current_coarse;
+    logic [15:0] current_fine;
     logic [15:0] trigger_counter;
     logic trigger_pulse_for_counter;
+    logic mmcm_locked;
     
-    // Trigger delay module instance
-    TRIGGER_DELAY_MODULE trigger_delay_inst (
+    // Enhanced trigger delay with MMCM fine control
+    TRIGGER_DELAY_ENHANCED trigger_delay_inst (
         .clk(clk),
         .rst(rst),
         .trigger_in(trigger_in),
         .trigger_out(trigger_out),
-        .delay_cycles(delay_cycles),
-        .delay_update(delay_update),
-        .edge_type(edge_type)
+        .coarse_delay(coarse_delay),
+        .coarse_update(coarse_update),
+        .fine_delay_ps(fine_delay_ps),
+        .fine_update(fine_update),
+        .edge_type(edge_type),
+        .mmcm_locked(mmcm_locked)
     );
     
     // Edge detector for counter
@@ -90,15 +97,18 @@ module TRIGGER_DELAY_TOP (
         STATE_SET_EDGE,
         STATE_GET_EDGE,
         STATE_GET_STATUS,
-        STATE_RESET_COUNT
+        STATE_RESET_COUNT,
+        STATE_SET_FINE,
+        STATE_GET_FINE
     } state_t;
     state_t current_state;
     
     logic [31:0] uart_transmission_counter;
     logic [31:0] rx_delay_value;
+    logic [15:0] rx_fine_value;
     
-    // LED assignment
-    assign leds = trigger_counter[3:0];
+    // LED assignment (bit 3 shows MMCM lock status)
+    assign leds = {mmcm_locked, trigger_counter[2:0]};
     
     // State machine
     always_ff @(posedge clk) begin
@@ -107,12 +117,16 @@ module TRIGGER_DELAY_TOP (
             uart_tx_en <= 1'b0;
             uart_tx_data <= 8'b0;
             uart_transmission_counter <= 32'd0;
-            delay_cycles <= 32'd0;
-            delay_update <= 1'b0;
+            coarse_delay <= 32'd0;
+            coarse_update <= 1'b0;
+            fine_delay_ps <= 16'd0;
+            fine_update <= 1'b0;
             edge_type <= `EDGE_RISING;
-            current_delay <= 32'd0;
+            current_coarse <= 32'd0;
+            current_fine <= 16'd0;
             trigger_counter <= 16'd0;
             rx_delay_value <= 32'd0;
+            rx_fine_value <= 16'd0;
             
         end else begin
             // Default assignments
@@ -120,16 +134,23 @@ module TRIGGER_DELAY_TOP (
             uart_tx_en <= 1'b0;
             uart_tx_data <= uart_tx_data;
             uart_transmission_counter <= uart_transmission_counter;
-            delay_cycles <= delay_cycles;
-            delay_update <= 1'b0;
+            coarse_delay <= coarse_delay;
+            coarse_update <= 1'b0;
+            fine_delay_ps <= fine_delay_ps;
+            fine_update <= 1'b0;
             edge_type <= edge_type;
-            current_delay <= current_delay;
+            current_coarse <= current_coarse;
+            current_fine <= current_fine;
             trigger_counter <= trigger_counter;
             rx_delay_value <= rx_delay_value;
+            rx_fine_value <= rx_fine_value;
             
-            // Update current delay when delay_update occurs
-            if (delay_update) begin
-                current_delay <= delay_cycles;
+            // Update current delays
+            if (coarse_update) begin
+                current_coarse <= coarse_delay;
+            end
+            if (fine_update) begin
+                current_fine <= fine_delay_ps;
             end
             
             // Increment trigger counter
@@ -148,15 +169,17 @@ module TRIGGER_DELAY_TOP (
                             `CMD_GET_EDGE:    current_state <= STATE_GET_EDGE;
                             `CMD_GET_STATUS:  current_state <= STATE_GET_STATUS;
                             `CMD_RESET_COUNT: current_state <= STATE_RESET_COUNT;
-                            default:         current_state <= STATE_IDLE;
+                            `CMD_SET_FINE:    current_state <= STATE_SET_FINE;
+                            `CMD_GET_FINE:    current_state <= STATE_GET_FINE;
+                            default:          current_state <= STATE_IDLE;
                         endcase
                     end
                 end
                 
                 STATE_SET_DELAY: begin
                     if (uart_transmission_counter >= 4) begin
-                        delay_cycles <= rx_delay_value;
-                        delay_update <= 1'b1;
+                        coarse_delay <= rx_delay_value;
+                        coarse_update <= 1'b1;
                         current_state <= STATE_IDLE;
                     end else begin
                         if (uart_rx_data_valid) begin
@@ -177,10 +200,10 @@ module TRIGGER_DELAY_TOP (
                     end else begin
                         if (uart_tx_ready) begin
                             case (uart_transmission_counter)
-                                0: uart_tx_data <= current_delay[7:0];
-                                1: uart_tx_data <= current_delay[15:8];
-                                2: uart_tx_data <= current_delay[23:16];
-                                3: uart_tx_data <= current_delay[31:24];
+                                0: uart_tx_data <= current_coarse[7:0];
+                                1: uart_tx_data <= current_coarse[15:8];
+                                2: uart_tx_data <= current_coarse[23:16];
+                                3: uart_tx_data <= current_coarse[31:24];
                             endcase
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;
@@ -214,17 +237,19 @@ module TRIGGER_DELAY_TOP (
                 end
                 
                 STATE_GET_STATUS: begin
-                    if (uart_transmission_counter >= 6) begin
+                    if (uart_transmission_counter >= 8) begin
                         current_state <= STATE_IDLE;
                     end else begin
                         if (uart_tx_ready) begin
                             case (uart_transmission_counter)
                                 0: uart_tx_data <= trigger_counter[7:0];
                                 1: uart_tx_data <= trigger_counter[15:8];
-                                2: uart_tx_data <= current_delay[7:0];
-                                3: uart_tx_data <= current_delay[15:8];
-                                4: uart_tx_data <= current_delay[23:16];
-                                5: uart_tx_data <= current_delay[31:24];
+                                2: uart_tx_data <= current_coarse[7:0];
+                                3: uart_tx_data <= current_coarse[15:8];
+                                4: uart_tx_data <= current_coarse[23:16];
+                                5: uart_tx_data <= current_coarse[31:24];
+                                6: uart_tx_data <= current_fine[7:0];
+                                7: uart_tx_data <= current_fine[15:8];
                             endcase
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;
@@ -235,6 +260,37 @@ module TRIGGER_DELAY_TOP (
                 STATE_RESET_COUNT: begin
                     trigger_counter <= 16'd0;
                     current_state <= STATE_IDLE;
+                end
+                
+                STATE_SET_FINE: begin
+                    if (uart_transmission_counter >= 2) begin
+                        fine_delay_ps <= rx_fine_value;
+                        fine_update <= 1'b1;
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_rx_data_valid) begin
+                            case (uart_transmission_counter)
+                                0: rx_fine_value[7:0] <= uart_rx_data;
+                                1: rx_fine_value[15:8] <= uart_rx_data;
+                            endcase
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+                
+                STATE_GET_FINE: begin
+                    if (uart_transmission_counter >= 2) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            case (uart_transmission_counter)
+                                0: uart_tx_data <= current_fine[7:0];
+                                1: uart_tx_data <= current_fine[15:8];
+                            endcase
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
                 end
                 
                 default: current_state <= STATE_IDLE;

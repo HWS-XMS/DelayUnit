@@ -12,12 +12,12 @@ read_verilog -sv $projRoot/rtl/core/TRIGGER_DELAY_ENHANCED.sv
 read_verilog -sv $projRoot/rtl/mmcm/MMCM_FINE_DELAY.sv
 read_verilog -sv $projRoot/rtl/uart/UART_RX.sv
 read_verilog -sv $projRoot/rtl/uart/UART_TX.sv
-read_verilog -sv $projRoot/rtl/TRIGGER_DELAY_TOP_MMCM.sv
+read_verilog -sv $projRoot/rtl/TRIGGER_DELAY_TOP.sv
 
-read_xdc $projRoot/constraints/trigger_delay_arty.xdc
+read_xdc $projRoot/constraints_arty/trigger_delay_arty.xdc
 
 # Synthesis with MMCM
-synth_design -top TRIGGER_DELAY_TOP_MMCM -part xc7a35ticsg324-1L
+synth_design -top TRIGGER_DELAY_TOP -part xc7a35ticsg324-1L
 
 write_checkpoint -force $outputDir/post_synth_mmcm.dcp
 report_timing_summary -file $outputDir/post_synth_mmcm_timing_summary.rpt

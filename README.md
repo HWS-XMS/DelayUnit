@@ -1,6 +1,6 @@
 # Picosecond-Precision Trigger Delay System
 
-A configurable digital delay system for FPGAs with 20.12ps resolution using Xilinx MMCM technology.
+A configurable digital delay system for Xilinx FPGAs with 20.12ps resolution using MMCM technology.
 
 ## Features
 
@@ -8,7 +8,7 @@ A configurable digital delay system for FPGAs with 20.12ps resolution using Xili
 - **Range**: Unlimited delay (coarse + fine combination)
 - **Control**: UART interface with Python API
 - **Edge Detection**: Configurable rising/falling/both edge triggering
-- **Platform Support**: Xilinx Artix-7 (Vivado) and Lattice iCE40 (Yosys)
+- **Platform**: Xilinx Artix-7 (Arty A7-35T)
 
 ## Architecture
 
@@ -18,8 +18,9 @@ A configurable digital delay system for FPGAs with 20.12ps resolution using Xili
 - **Total Delay** = (coarse_cycles × 10ns) + (fine_steps × 20.12ps)
 
 ### Key Modules
-- `TRIGGER_DELAY_TOP_MMCM`: Top module with UART control and MMCM
+- `TRIGGER_DELAY_TOP`: Top module with UART control and MMCM integration
 - `MMCM_FINE_DELAY`: Fine delay using MMCME2_ADV primitive
+- `TRIGGER_DELAY_ENHANCED`: Combined coarse and fine delay system
 - `CONFIGURABLE_DELAY`: Coarse delay in clock cycles
 - `CDC_EDGE_DETECT`: Clock domain crossing with edge detection
 - `UART_RX/TX`: UART communication modules (115200 baud)
@@ -30,70 +31,46 @@ A configurable digital delay system for FPGAs with 20.12ps resolution using Xili
 delay_unit/
 ├── rtl/                    # RTL source files
 │   ├── core/              # Core delay logic
-│   │   ├── CDC_EDGE_DETECT.sv
-│   │   ├── CONFIGURABLE_DELAY.sv
-│   │   ├── TRIGGER_DELAY_MODULE.sv
-│   │   └── TRIGGER_DELAY_ENHANCED.sv
 │   ├── mmcm/              # MMCM fine delay
-│   │   └── MMCM_FINE_DELAY.sv
 │   ├── uart/              # UART interface
-│   │   ├── UART_RX.sv
-│   │   └── UART_TX.sv
-│   ├── TRIGGER_DELAY_TOP.sv       # Basic top module
-│   ├── TRIGGER_DELAY_TOP_MMCM.sv  # MMCM-enhanced top
-│   └── trigger_delay_defs.vh      # Definitions header
-├── tb/                    # Testbenches
-│   ├── TRIGGER_DELAY_TB.sv
+│   ├── TRIGGER_DELAY_TOP.sv
+│   └── trigger_delay_defs.vh
+├── tb/                    # Testbench
 │   └── MMCM_FINE_DELAY_TB.sv
-├── constraints/           # Pin constraints
+├── constraints_arty/      # Arty board constraints
 │   └── trigger_delay_arty.xdc
 ├── scripts/               # Build and control scripts
 │   ├── vivado/           # Vivado synthesis
-│   │   ├── synth_trigger_delay.tcl
-│   │   └── synth_mmcm.tcl
+│   │   └── synth.tcl
 │   └── python/           # Control software
 │       └── delay_control.py
-├── IceStick/             # IceStick synthesis
-│   ├── synth.ys
-│   ├── icestick.pcf
-│   └── Makefile
-└── docs/                 # Documentation
+└── Makefile              # Build automation
 ```
 
 ## Quick Start
 
-### 1. Synthesis (Vivado)
+### 1. Synthesis
 
-For MMCM version with picosecond precision:
 ```bash
+# Using Makefile
+make synth
+
+# Or directly with Vivado
 cd scripts/vivado
-vivado -mode batch -source synth_mmcm.tcl
+vivado -mode batch -source synth.tcl
 ```
 
-For basic version (clock-cycle resolution only):
-```bash
-cd scripts/vivado
-vivado -mode batch -source synth_trigger_delay.tcl
-```
-
-### 2. Synthesis (IceStick/Yosys)
+### 2. Programming FPGA
 
 ```bash
-cd IceStick
-make
+# Using Makefile
+make program
+
+# Or manually in Vivado GUI
+# Open Hardware Manager, connect to board, program with build/trigger_delay_mmcm.bit
 ```
 
-### 3. Programming FPGA
-
-```bash
-# For Arty board
-vivado -mode batch -source program.tcl
-
-# For IceStick
-iceprog trigger_delay.bin
-```
-
-### 4. Control via Python
+### 3. Control via Python
 
 ```bash
 cd scripts/python
@@ -184,20 +161,17 @@ This integer math avoids floating point and prevents overflow.
 
 LED[3] indicates MMCM lock status.
 
-## Testing
+## Simulation
 
-### Simulation
 ```bash
-cd tb
-vsim TRIGGER_DELAY_TB
-vsim MMCM_FINE_DELAY_TB
-```
+# Run testbench
+make sim
 
-### Hardware Testing
-1. Connect trigger source to BTN1
-2. Monitor delayed output on LED0
-3. Use oscilloscope to measure actual delay
-4. Control via Python script
+# Or manually
+cd tb
+iverilog -g2012 -I../rtl ../rtl/mmcm/MMCM_FINE_DELAY.sv MMCM_FINE_DELAY_TB.sv -o mmcm_tb.vvp
+vvp mmcm_tb.vvp
+```
 
 ## Performance
 
@@ -205,7 +179,13 @@ vsim MMCM_FINE_DELAY_TB
 - Minimum Delay: ~30ns (system latency)
 - Resolution: 20.12ps
 - Jitter: < 50ps RMS (MMCM specification)
-- Maximum Frequency: 50MHz trigger rate
+- Maximum Trigger Rate: 50MHz
+
+## Requirements
+
+- Xilinx Vivado (for synthesis)
+- Python 3.x with pyserial
+- Arty A7-35T board (or compatible Xilinx 7-series FPGA)
 
 ## License
 
