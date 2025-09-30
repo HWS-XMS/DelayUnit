@@ -12,7 +12,7 @@ module MMCM_FINE_DELAY (
 
     // MMCM signals
     logic clkfb, clkfb_buf;
-    logic clk_vco;  // VCO clock at 1GHz
+    logic clk_vco;  // VCO clock at 887.5MHz
     logic ps_clk;
     logic ps_en;
     logic ps_incdec;

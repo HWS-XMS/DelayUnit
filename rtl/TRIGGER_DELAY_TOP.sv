@@ -2,7 +2,7 @@
 
 `include "TRIGGER_DELAY_DEFS.vh"
 
-module TRIGGER_DELAY_TOP_MMCM (
+module TRIGGER_DELAY_TOP (
     input  logic        clk,
     input  logic        rst,
     input  logic        trigger_in,
