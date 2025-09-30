@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "trigger_delay_defs.vh"
+`include "../trigger_delay_defs.vh"
 
 module CDC_EDGE_DETECT #(
     parameter SYNC_STAGES = 3

@@ -3,6 +3,11 @@ IceStick/arachne-pnr/
 IceStick/icestorm/
 IceStick/nextpnr/
 
+# Build directories
+build/
+scripts/vivado/build/
+scripts/vivado/.Xil/
+
 # Build outputs
 *.bit
 *.bin

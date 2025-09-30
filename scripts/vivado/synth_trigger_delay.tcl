@@ -1,16 +1,19 @@
 set outputDir ./build
 file mkdir $outputDir
 
-# Read design sources
-read_verilog -sv ./TRIGGER_DELAY_PKG.sv
-read_verilog -sv ./CDC_EDGE_DETECT.sv
-read_verilog -sv ./CONFIGURABLE_DELAY.sv
-read_verilog -sv ./TRIGGER_DELAY_MODULE.sv
-read_verilog -sv ./UART_RX.sv
-read_verilog -sv ./UART_TX.sv
-read_verilog -sv ./TRIGGER_DELAY_TOP.sv
+# Set project root relative to script location
+set projRoot [file normalize [file dirname [info script]]/../..]
 
-read_xdc ./trigger_delay_arty.xdc
+# Read design sources
+read_verilog -sv $projRoot/rtl/trigger_delay_defs.vh
+read_verilog -sv $projRoot/rtl/core/CDC_EDGE_DETECT.sv
+read_verilog -sv $projRoot/rtl/core/CONFIGURABLE_DELAY.sv
+read_verilog -sv $projRoot/rtl/core/TRIGGER_DELAY_MODULE.sv
+read_verilog -sv $projRoot/rtl/uart/UART_RX.sv
+read_verilog -sv $projRoot/rtl/uart/UART_TX.sv
+read_verilog -sv $projRoot/rtl/TRIGGER_DELAY_TOP.sv
+
+read_xdc $projRoot/constraints/trigger_delay_arty.xdc
 
 # Synthesis
 synth_design -top TRIGGER_DELAY_TOP -part xc7a35ticsg324-1L

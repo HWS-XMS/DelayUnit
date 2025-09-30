@@ -1,7 +1,13 @@
 # Yosys synthesis script for IceStick
 
 # Read all files with include path for header
-read_verilog -sv -I.. ../CDC_EDGE_DETECT.sv ../CONFIGURABLE_DELAY.sv ../TRIGGER_DELAY_MODULE.sv ../UART_RX.sv ../UART_TX.sv ../TRIGGER_DELAY_TOP.sv
+read_verilog -sv -I../rtl \
+    ../rtl/core/CDC_EDGE_DETECT.sv \
+    ../rtl/core/CONFIGURABLE_DELAY.sv \
+    ../rtl/core/TRIGGER_DELAY_MODULE.sv \
+    ../rtl/uart/UART_RX.sv \
+    ../rtl/uart/UART_TX.sv \
+    ../rtl/TRIGGER_DELAY_TOP.sv
 
 # Elaborate design hierarchy
 hierarchy -check -top TRIGGER_DELAY_TOP
