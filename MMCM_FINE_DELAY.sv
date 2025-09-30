@@ -20,24 +20,26 @@ module MMCM_FINE_DELAY (
     
     // Phase shift calculation
     // VCO at 887.5MHz (8.875× multiplier)
-    // VCO period = 1126.76ps, 56 steps per period
-    // Resolution: 1126.76ps/56 ≈ 20.12ps per step (practically 20ps!)
-    // Full 10ns = 8.875 VCO periods = 497 phase steps
+    // VCO period = 1000ps / 0.8875 = 1126.76ps
+    // Resolution: 1126.76ps/56 = 20.12ps per step
+    // Full 10ns = 8.875 VCO periods = 497.2 phase steps
     logic [8:0] phase_steps;
     logic [8:0] current_steps;
     logic [8:0] target_steps;
     
     // Calculate phase steps from picoseconds
-    // Simple: 20ps per step, so steps = ps / 20
+    // Accurate: steps = ps / 20.12 ≈ ps * 100 / 2012
+    // To avoid division, use approximation: ps * 50 / 1006
     always_ff @(posedge clk) begin
         if (rst) begin
             target_steps <= 9'd0;
         end else if (fine_update) begin
-            // Direct conversion: 1 step = 20ps
+            // Accurate conversion: 1 step = 20.12ps
+            // Using integer math: ps * 50 / 1006 (preserves precision)
             if (fine_delay_ps >= 16'd10000) begin
-                target_steps <= 9'd500;  // 500 × 20ps = 10000ps
+                target_steps <= 9'd497;  // Max steps for 10ns
             end else begin
-                target_steps <= fine_delay_ps / 20;  // Clean division!
+                target_steps <= (fine_delay_ps * 50) / 1006;
             end
         end
     end

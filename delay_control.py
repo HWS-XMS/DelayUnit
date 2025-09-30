@@ -2,6 +2,9 @@
 """
 Trigger Delay Control Script
 Controls the FPGA-based trigger delay system via UART
+
+Resolution: 20.12ps per step (887.5MHz VCO / 56 steps)
+Math: steps = ps * 50 / 1006 (avoids floating point)
 """
 
 import serial
@@ -75,9 +78,10 @@ class DelayController:
         fine_ps = struct.unpack('<H', data)[0]
         
         # Calculate actual delay in ps
-        # With 887.5MHz VCO: each step is exactly 20ps!
-        steps = fine_ps // 20
-        actual_fine_ps = steps * 20  # Clean 20ps increments
+        # With 887.5MHz VCO: each step is 20.12ps
+        # steps = ps * 50 / 1006 (matches FPGA calculation)
+        steps = (fine_ps * 50) // 1006
+        actual_fine_ps = (steps * 2012) // 100  # steps * 20.12
         
         return coarse_cycles * 10000 + actual_fine_ps
     
@@ -103,9 +107,9 @@ class DelayController:
             coarse_cycles = struct.unpack('<I', data[2:6])[0]
             fine_ps = struct.unpack('<H', data[6:8])[0]
             
-            # Calculate actual delay with 20ps resolution
-            steps = fine_ps // 20
-            actual_fine_ps = steps * 20
+            # Calculate actual delay with 20.12ps resolution
+            steps = (fine_ps * 50) // 1006
+            actual_fine_ps = (steps * 2012) // 100
             actual_total_ps = coarse_cycles * 10000 + actual_fine_ps
             
             return {
