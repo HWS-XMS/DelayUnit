@@ -1,0 +1,32 @@
+# Yosys synthesis script for IceStick
+
+# Read all files with include path for header
+read_verilog -sv -I.. ../CDC_EDGE_DETECT.sv ../CONFIGURABLE_DELAY.sv ../TRIGGER_DELAY_MODULE.sv ../UART_RX.sv ../UART_TX.sv ../TRIGGER_DELAY_TOP.sv
+
+# Elaborate design hierarchy
+hierarchy -check -top TRIGGER_DELAY_TOP
+
+# Convert processes to netlists
+proc
+opt
+
+# Technology mapping
+fsm
+opt
+memory
+opt
+techmap
+opt
+
+# Map to iCE40 cells
+synth_ice40 -top TRIGGER_DELAY_TOP
+
+# Optimize
+opt -fast
+
+# Print statistics
+stat
+
+# Write output
+write_json trigger_delay.json
+write_verilog trigger_delay_synth.v
