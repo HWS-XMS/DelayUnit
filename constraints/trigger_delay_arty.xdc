@@ -43,7 +43,7 @@ set_input_delay -clock [get_clocks sys_clk_pin] -max -add_delay 5.000 [get_ports
 set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports trigger_out]
 set_output_delay -clock [get_clocks sys_clk_pin] -max -add_delay 2.000 [get_ports trigger_out]
 
-## UART timing constraints - for 115200 baud
+## UART timing constraints - for 1Mbaud
 set_input_delay -clock [get_clocks sys_clk_pin] -min -add_delay 2.000 [get_ports uart_rx]
 set_input_delay -clock [get_clocks sys_clk_pin] -max -add_delay 5.000 [get_ports uart_rx]
 set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports uart_tx]

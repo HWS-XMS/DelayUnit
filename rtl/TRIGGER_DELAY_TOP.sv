@@ -13,7 +13,7 @@ module TRIGGER_DELAY_TOP (
 );
 
     localparam CLK_FREQ = 100_000_000;
-    localparam BAUD_RATE = 115200;
+    localparam BAUD_RATE = 1_000_000;
     
     // UART signals
     logic [7:0] uart_rx_data;

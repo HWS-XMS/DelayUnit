@@ -29,10 +29,33 @@ class EdgeType(IntEnum):
     FALLING = 0x02
     BOTH = 0x03
 
-class DelayController:
-    def __init__(self, port='/dev/ttyUSB1', baudrate=115200):
-        self.ser = serial.Serial(port, baudrate, timeout=1)
+class DelayUnit:
+    # Digilent Arty USB identifiers
+    ARTY_VID = 0x0403  # FTDI vendor ID
+    ARTY_PID = 0x6010  # FT2232H product ID used by Arty
+    
+    def __init__(self):
+        port = self._find_arty_port()
+        if port is None:
+            raise RuntimeError(
+                f"Digilent Arty board not found (VID:PID = {self.ARTY_VID:04X}:{self.ARTY_PID:04X}). "
+                "Please ensure the board is connected and drivers are installed."
+            )
+        print(f"Found Arty board on {port}")
+        
+        self.ser = serial.Serial(port, 1000000, timeout=1)
         time.sleep(0.1)  # Allow serial to settle
+    
+    def _find_arty_port(self):
+        """Search for Digilent Arty board among connected USB devices."""
+        import serial.tools.list_ports
+        for port_info in serial.tools.list_ports.comports():
+            if port_info.vid == self.ARTY_VID and port_info.pid == self.ARTY_PID:
+                # Arty has two serial ports (JTAG and UART), typically the second one is UART
+                if 'usbserial' in port_info.location or port_info.location.endswith('1'):
+                    return port_info.device
+                return port_info.device
+        return None
     
     def close(self):
         self.ser.close()
@@ -128,8 +151,6 @@ class DelayController:
 
 def main():
     parser = argparse.ArgumentParser(description='Control FPGA trigger delay')
-    parser.add_argument('--port', default='/dev/ttyUSB1', help='Serial port')
-    parser.add_argument('--baud', type=int, default=115200, help='Baud rate')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
@@ -162,7 +183,11 @@ def main():
         parser.print_help()
         return
     
-    controller = DelayController(args.port, args.baud)
+    try:
+        controller = DelayUnit()
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        return
     
     try:
         if args.command == 'set':

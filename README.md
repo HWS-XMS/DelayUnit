@@ -23,7 +23,7 @@ A configurable digital delay system for Xilinx FPGAs with 20.12ps resolution usi
 - `TRIGGER_DELAY_ENHANCED`: Combined coarse and fine delay system
 - `CONFIGURABLE_DELAY`: Coarse delay in clock cycles
 - `CDC_EDGE_DETECT`: Clock domain crossing with edge detection
-- `UART_RX/TX`: UART communication modules (115200 baud)
+- `UART_RX/TX`: UART communication modules (1Mbaud)
 
 ## Directory Structure
 
@@ -122,7 +122,7 @@ print(f"Current delay: {actual_ps}ps")
 | GET_FINE | 0x08 | - | Get fine delay |
 
 ### Communication Settings
-- Baud rate: 115200
+- Baud rate: 1000000
 - Data bits: 8
 - Stop bits: 1
 - Parity: None
