@@ -20,7 +20,7 @@ setup(
     description="FPGA-based picosecond delay control with 20ps resolution",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://git.tu-berlin.de/sass/delay_unit",
+    url="https://github.com/HWS-XMS/DelayUnit",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
