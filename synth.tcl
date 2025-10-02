@@ -43,5 +43,10 @@ report_power -file $outputDir/post_route_power.rpt
 report_drc -file $outputDir/post_imp_drc.rpt
 write_verilog -force $outputDir/impl_netlist.v -mode timesim -sdf_anno true
 
+# Set bitstream properties for SPI flash programming
+set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]
+set_property BITSTREAM.CONFIG.CONFIGRATE 50 [current_design]
+set_property CONFIG_MODE SPIx4 [current_design]
+
 # Generate bitstream
 write_bitstream -force $outputDir/trigger_delay.bit

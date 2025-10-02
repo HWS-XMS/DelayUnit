@@ -1,27 +1,30 @@
 # Picosecond Delay Unit - Makefile
 
-.PHONY: all synth sim clean help program
+.PHONY: all synth sim clean help program program-flash
 
 help:
 	@echo "Picosecond Delay Unit - Build Targets"
 	@echo ""
 	@echo "Synthesis:"
-	@echo "  make synth     - Synthesize design for Artix-7"
+	@echo "  make synth         - Synthesize design for Artix-7"
+	@echo ""
+	@echo "Programming:"
+	@echo "  make program       - Program FPGA (volatile, lost on power cycle)"
+	@echo "  make program-flash - Program SPI flash (persistent, boots on power-up)"
 	@echo ""
 	@echo "Simulation:"
-	@echo "  make sim       - Run MMCM testbench"
+	@echo "  make sim           - Run MMCM testbench"
 	@echo ""
 	@echo "Other:"
-	@echo "  make clean     - Clean all build artifacts"
-	@echo "  make program   - Program FPGA with bitstream"
-	@echo "  make help      - Show this help"
+	@echo "  make clean         - Clean all build artifacts"
+	@echo "  make help          - Show this help"
 
 # Default target
 all: synth
 
 # Vivado synthesis
 synth:
-	@echo "Synthesizing design with 20ps resolution MMCM..."
+	@echo "Synthesizing design with 17ps resolution MMCM..."
 	vivado -mode batch -source synth.tcl
 
 # Simulation
@@ -47,14 +50,20 @@ clean:
 install-python:
 	pip install pyserial
 
-# Program FPGA
-program: synth
+# Program FPGA (volatile - lost on power cycle)
+program:
 	@echo "Programming FPGA with bitstream..."
-	echo "open_hw_manager" > program.tcl && \
-	echo "connect_hw_server" >> program.tcl && \
-	echo "open_hw_target" >> program.tcl && \
-	echo "set_property PROGRAM.FILE {build/trigger_delay.bit} [current_hw_device]" >> program.tcl && \
-	echo "program_hw_devices [current_hw_device]" >> program.tcl && \
-	echo "close_hw_manager" >> program.tcl && \
-	vivado -mode batch -source program.tcl && \
-	rm program.tcl
+	@if [ ! -f build/trigger_delay.bit ]; then \
+		echo "Error: Bitstream not found. Run 'make synth' first."; \
+		exit 1; \
+	fi
+	vivado -mode batch -source program.tcl
+
+# Program SPI Flash (persistent - survives power cycle)
+program-flash:
+	@echo "Programming SPI flash with bitstream..."
+	@if [ ! -f build/trigger_delay.bit ]; then \
+		echo "Error: Bitstream not found. Run 'make synth' first."; \
+		exit 1; \
+	fi
+	vivado -mode batch -source program_flash.tcl

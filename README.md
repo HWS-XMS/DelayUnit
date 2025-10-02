@@ -1,10 +1,10 @@
 # Picosecond-Precision Trigger Delay System
 
-A configurable digital delay system for Xilinx FPGAs with 20.12ps resolution using MMCM technology.
+A configurable digital delay system for Xilinx FPGAs with 17.0068ps resolution using MMCM technology.
 
 ## Features
 
-- **Resolution**: 20.12ps per step (887.5MHz VCO with 56 phase steps)
+- **Resolution**: 17.0068ps per step (1050MHz VCO with 56 phase steps)
 - **Range**: Unlimited delay (coarse + fine combination)
 - **Control**: UART interface with Python API
 - **Edge Detection**: Configurable rising/falling/both edge triggering
@@ -14,8 +14,8 @@ A configurable digital delay system for Xilinx FPGAs with 20.12ps resolution usi
 
 ### Delay System
 - **Coarse Delay**: Clock cycle increments (10ns @ 100MHz)
-- **Fine Delay**: MMCM phase shifting (20.12ps steps)
-- **Total Delay** = (coarse_cycles × 10ns) + (fine_steps × 20.12ps)
+- **Fine Delay**: MMCM phase shifting (17.0068ps steps)
+- **Total Delay** = (coarse_cycles × 10ns) + (fine_steps × 17.0068ps)
 
 ### Key Modules
 - `TRIGGER_DELAY_TOP`: Top module with UART control and MMCM integration
@@ -59,6 +59,7 @@ vivado -mode batch -source synth.tcl
 
 ### 2. Programming FPGA
 
+#### Volatile Programming (JTAG - lost on power cycle)
 ```bash
 # Using Makefile
 make program
@@ -66,6 +67,21 @@ make program
 # Or manually in Vivado GUI
 # Open Hardware Manager, connect to board, program with build/trigger_delay.bit
 ```
+
+#### Persistent Programming (SPI Flash - survives power cycle)
+```bash
+# Using Makefile
+make program-flash
+
+# Or manually with Vivado
+vivado -mode batch -source program_flash.tcl
+```
+
+The SPI flash programming will:
+1. Generate BIN file from bitstream
+2. Erase flash memory
+3. Program and verify flash
+4. FPGA will auto-boot from flash on power-up
 
 ### 3. Control via Python
 
@@ -81,30 +97,38 @@ python delay_control.py get
 # Get system status
 python delay_control.py status
 
-# Sweep delay range
-python delay_control.py sweep 0 10000 100
-
 # Set edge detection
 python delay_control.py edge rising
+
+# Sweep delay range (0-10ns in 100ps steps)
+python delay_control.py sweep 0 10000 100
 ```
 
 ## Python API
 
-The control script works entirely in picoseconds:
+The control API uses properties for clean, Pythonic access (all delays in picoseconds):
 
 ```python
-from delay_control import DelayController
+from delay_unit import DelayUnit, EdgeType
 
-controller = DelayController('/dev/ttyUSB1')
+with DelayUnit() as unit:
+    # Set delay in picoseconds (25.5ns)
+    unit.delay_ps = 25500
+    print(f"Configured: {unit.delay_ps}ps ({unit.delay_ps/1000}ns)")
 
-# Set delay in picoseconds
-result = controller.set_delay(5000)  # 5ns
-print(f"Requested: {result['requested_ps']}ps")
-print(f"Actual: {result['actual_ps']}ps")
+    # Set fine delay directly (0-9999ps)
+    unit.fine = 5000  # 5ns fine delay
 
-# Read back actual delay
-actual_ps = controller.get_delay()
-print(f"Current delay: {actual_ps}ps")
+    # Configure edge detection
+    unit.edge = EdgeType.RISING
+
+    # Get system status
+    status = unit.status
+    print(f"Trigger count: {status['trigger_count']}")
+    print(f"Actual delay: {status['actual_delay_ps']}ps")
+
+    # Reset counter
+    unit.reset_counter()
 ```
 
 ## UART Protocol
@@ -131,15 +155,16 @@ print(f"Current delay: {actual_ps}ps")
 
 ### MMCM Configuration
 - Input: 100MHz system clock
-- VCO Frequency: 887.5MHz (8.875× multiplier)
+- VCO Frequency: 1050MHz (21/2 = 10.5× multiplier)
 - Phase Steps: 56 per VCO period
-- Resolution: 1126.76ps / 56 = 20.12ps per step
-- Maximum Fine Delay: 497 steps × 20.12ps ≈ 10ns
+- Resolution: 952.38ps / 56 = 17.0068ps per step
+- Maximum Fine Delay: 588 steps × 17.0068ps ≈ 10ns
+- Note: CLKOUT0 = 50MHz (used only for trigger delay, system runs at 100MHz)
 
 ### Delay Calculation
 ```
-Requested ps → Steps = ps × 50 / 1006
-Actual ps = Steps × 20.12
+Requested ps → Steps = ps × 59 / 1003
+Actual ps = Steps × 17.0068
 ```
 
 This integer math avoids floating point and prevents overflow.
@@ -174,7 +199,7 @@ vvp mmcm_tb.vvp
 
 - Clock Frequency: 100MHz
 - Minimum Delay: ~30ns (system latency)
-- Resolution: 20.12ps
+- Resolution: 17.0068ps
 - Jitter: < 50ps RMS (MMCM specification)
 - Maximum Trigger Rate: 50MHz
 

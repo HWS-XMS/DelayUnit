@@ -3,8 +3,8 @@
 Trigger Delay Control Script
 Controls the FPGA-based trigger delay system via UART
 
-Resolution: 20.12ps per step (887.5MHz VCO / 56 steps)
-Math: steps = ps * 50 / 1006 (avoids floating point)
+Resolution: 17.0068ps per step (1050MHz VCO / 56 steps)
+Math: steps = ps * 59 / 1003 (avoids floating point)
 """
 
 import serial
@@ -100,13 +100,9 @@ class DelayUnit:
             return None
         fine_ps = struct.unpack('<H', data)[0]
         
-        # Calculate actual delay in ps
-        # With 887.5MHz VCO: each step is 20.12ps
-        # steps = ps * 50 / 1006 (matches FPGA calculation)
-        steps = (fine_ps * 50) // 1006
-        actual_fine_ps = (steps * 2012) // 100  # steps * 20.12
-        
-        return coarse_cycles * 10000 + actual_fine_ps
+        # FPGA stores requested values, not quantized
+        # Conversion happens internally in MMCM
+        return coarse_cycles * 10000 + fine_ps
     
     def set_edge_type(self, edge_type):
         """Set trigger edge detection type"""
@@ -129,11 +125,10 @@ class DelayUnit:
             trigger_count = struct.unpack('<H', data[0:2])[0]
             coarse_cycles = struct.unpack('<I', data[2:6])[0]
             fine_ps = struct.unpack('<H', data[6:8])[0]
-            
-            # Calculate actual delay with 20.12ps resolution
-            steps = (fine_ps * 50) // 1006
-            actual_fine_ps = (steps * 2012) // 100
-            actual_total_ps = coarse_cycles * 10000 + actual_fine_ps
+
+            # FPGA stores requested values, not quantized
+            # Conversion happens internally in MMCM
+            actual_total_ps = coarse_cycles * 10000 + fine_ps
             
             return {
                 'trigger_count': trigger_count,

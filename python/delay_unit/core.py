@@ -37,7 +37,7 @@ class DelayUnit:
     This class provides high-level control of a trigger delay system
     implemented on Xilinx FPGAs with MMCM-based fine delay adjustment.
     
-    Resolution: 20.12ps per step (887.5MHz VCO / 56 steps)
+    Resolution: 17.0068ps per step (1050MHz VCO / 56 steps)
     Range: Unlimited (coarse + fine delay combination)
     
     Attributes:
@@ -190,11 +190,10 @@ class DelayUnit:
             trigger_count = struct.unpack('<H', data[0:2])[0]
             coarse_cycles = struct.unpack('<I', data[2:6])[0]
             fine_ps = struct.unpack('<H', data[6:8])[0]
-            
-            # Calculate actual delay with 20.12ps resolution
-            steps = (fine_ps * 50) // 1006
-            actual_fine_ps = (steps * 2012) // 100
-            actual_total_ps = coarse_cycles * 10000 + actual_fine_ps
+
+            # FPGA stores requested values, not quantized
+            # Conversion happens internally in MMCM
+            actual_total_ps = coarse_cycles * 10000 + fine_ps
             
             return {
                 'trigger_count': trigger_count,
@@ -205,43 +204,14 @@ class DelayUnit:
             }
         return None
     
-    def set_delay(self, picoseconds: int) -> Dict[str, Any]:
+    @property
+    def delay_ps(self) -> Optional[int]:
         """
-        Set total delay in picoseconds.
-        
-        Automatically splits the delay into coarse (clock cycles) and
-        fine (MMCM phase shift) components.
-        
-        Args:
-            picoseconds: Total delay in picoseconds
-            
-        Returns:
-            Dictionary with requested_ps, coarse_cycles, fine_ps, and actual_ps
-        """
-        # Calculate coarse cycles (10000ps per cycle at 100MHz)
-        coarse_cycles = int(picoseconds // 10000)
-        # Calculate fine delay (remainder, up to 9999ps)
-        fine_ps = int(picoseconds % 10000)
-        
-        # Set coarse delay
-        self.coarse = coarse_cycles
-        time.sleep(0.01)
-        
-        # Set fine delay  
-        self.fine = fine_ps
-        
-        # Return what was set
-        return {
-            'requested_ps': picoseconds,
-            'coarse_cycles': coarse_cycles,
-            'fine_ps': fine_ps,
-            'actual_ps': self.get_delay()  # Read back actual value
-        }
-    
-    def get_delay(self) -> Optional[int]:
-        """
-        Get actual configured delay in picoseconds.
-        
+        Get/set total delay in picoseconds.
+
+        When setting, automatically splits the delay into coarse (clock cycles)
+        and fine (MMCM phase shift) components.
+
         Returns:
             Total delay in picoseconds, or None if read fails
         """
@@ -249,21 +219,36 @@ class DelayUnit:
         coarse_cycles = self.coarse
         if coarse_cycles is None:
             return None
-        
+
         # Get fine delay
         fine_ps = self.fine
         if fine_ps is None:
             return None
-        
-        # Calculate actual delay in ps
-        # With 887.5MHz VCO: each step is 20.12ps
-        # steps = ps * 50 / 1006 (matches FPGA calculation)
-        steps = (fine_ps * 50) // 1006
-        actual_fine_ps = (steps * 2012) // 100  # steps * 20.12
-        
-        return coarse_cycles * 10000 + actual_fine_ps
-    
-    
+
+        # FPGA stores the requested value, not the quantized value
+        # Conversion to steps happens internally in MMCM
+        return coarse_cycles * 10000 + fine_ps
+
+    @delay_ps.setter
+    def delay_ps(self, picoseconds: int):
+        """
+        Set total delay in picoseconds.
+
+        Args:
+            picoseconds: Total delay in picoseconds
+        """
+        # Calculate coarse cycles (10000ps per cycle at 100MHz)
+        coarse_cycles = int(picoseconds // 10000)
+        # Calculate fine delay (remainder, up to 9999ps)
+        fine_ps = int(picoseconds % 10000)
+
+        # Set coarse delay
+        self.coarse = coarse_cycles
+        time.sleep(0.01)
+
+        # Set fine delay
+        self.fine = fine_ps
+
     def reset_counter(self) -> bool:
         """
         Reset the trigger counter.
@@ -273,27 +258,3 @@ class DelayUnit:
         """
         self.ser.write(bytes([Command.RESET_COUNT]))
         return True
-    
-    def set_delay_ns(self, nanoseconds: float) -> Dict[str, Any]:
-        """
-        Convenience method to set delay in nanoseconds.
-        
-        Args:
-            nanoseconds: Delay in nanoseconds
-            
-        Returns:
-            Same as set_delay()
-        """
-        return self.set_delay(int(nanoseconds * 1000))
-    
-    def get_delay_ns(self) -> Optional[float]:
-        """
-        Convenience method to get delay in nanoseconds.
-        
-        Returns:
-            Delay in nanoseconds, or None if read fails
-        """
-        delay_ps = self.get_delay()
-        if delay_ps is not None:
-            return delay_ps / 1000.0
-        return None

@@ -19,27 +19,27 @@ module MMCM_FINE_DELAY (
     logic ps_done;
     
     // Phase shift calculation
-    // VCO at 887.5MHz (8.875× multiplier)
-    // VCO period = 1000ps / 0.8875 = 1126.76ps
-    // Resolution: 1126.76ps/56 = 20.12ps per step
-    // Full 10ns = 8.875 VCO periods = 497.2 phase steps
-    logic [8:0] phase_steps;
-    logic [8:0] current_steps;
-    logic [8:0] target_steps;
-    
+    // VCO at 1050MHz (21/2 multiplier)
+    // VCO period = 952.38ps
+    // Resolution: 952.38ps/56 = 17.0068ps per step
+    // Full 10ns = 10.5 VCO periods = 588 phase steps
+    logic [9:0] phase_steps;
+    logic [9:0] current_steps;
+    logic [9:0] target_steps;
+
     // Calculate phase steps from picoseconds
-    // Accurate: steps = ps / 20.12 ≈ ps * 100 / 2012
-    // To avoid division, use approximation: ps * 50 / 1006
+    // Accurate: steps = ps / 17.0068 ≈ ps * 10000 / 170068
+    // Simplified: steps = ps * 59 / 1003 (0.01% error)
     always_ff @(posedge clk) begin
         if (rst) begin
-            target_steps <= 9'd0;
+            target_steps <= 10'd0;
         end else if (fine_update) begin
-            // Accurate conversion: 1 step = 20.12ps
-            // Using integer math: ps * 50 / 1006 (preserves precision)
+            // Accurate conversion: 1 step = 17.0068ps
+            // Using integer math: ps * 59 / 1003 (preserves precision)
             if (fine_delay_ps >= 16'd10000) begin
-                target_steps <= 9'd497;  // Max steps for 10ns
+                target_steps <= 10'd588;  // Max steps for 10ns
             end else begin
-                target_steps <= (fine_delay_ps * 50) / 1006;
+                target_steps <= (fine_delay_ps * 59) / 1003;
             end
         end
     end
@@ -57,7 +57,7 @@ module MMCM_FINE_DELAY (
             ps_state <= PS_IDLE;
             ps_en <= 1'b0;
             ps_incdec <= 1'b0;
-            current_steps <= 9'd0;
+            current_steps <= 10'd0;
         end else begin
             ps_en <= 1'b0;  // Default
             
@@ -77,9 +77,9 @@ module MMCM_FINE_DELAY (
                 PS_WAIT: begin
                     if (ps_done) begin
                         if (ps_incdec) begin
-                            current_steps <= current_steps + 9'd1;
+                            current_steps <= current_steps + 10'd1;
                         end else begin
-                            current_steps <= current_steps - 9'd1;
+                            current_steps <= current_steps - 10'd1;
                         end
                         ps_state <= PS_IDLE;
                     end
@@ -93,14 +93,14 @@ module MMCM_FINE_DELAY (
     // MMCME2_ADV instantiation
     MMCME2_ADV #(
         .BANDWIDTH            ("OPTIMIZED"),
-        .CLKFBOUT_MULT_F      (8.875),      // 100MHz × 8.875 = 887.5MHz VCO (20ps steps!)
+        .CLKFBOUT_MULT_F      (21.0),       // 100MHz × 21 / 2 = 1050MHz VCO (17.0068ps steps!)
         .CLKFBOUT_PHASE       (0.0),
         .CLKFBOUT_USE_FINE_PS ("FALSE"),
-        
+
         .CLKIN1_PERIOD        (10.0),       // 100MHz = 10ns period
         .CLKIN2_PERIOD        (0.0),
-        
-        .CLKOUT0_DIVIDE_F     (8.875),      // 887.5MHz / 8.875 = 100MHz
+
+        .CLKOUT0_DIVIDE_F     (21.0),       // 1050MHz / 21 = 50MHz (INTEGER for fine PS!)
         .CLKOUT0_DUTY_CYCLE   (0.5),
         .CLKOUT0_PHASE        (0.0),
         .CLKOUT0_USE_FINE_PS  ("TRUE"),     // Enable fine phase shift
@@ -137,7 +137,7 @@ module MMCM_FINE_DELAY (
         .CLKOUT6_USE_FINE_PS  ("FALSE"),
         
         .COMPENSATION         ("ZHOLD"),
-        .DIVCLK_DIVIDE        (1),
+        .DIVCLK_DIVIDE        (2),
         .REF_JITTER1          (0.01),
         .STARTUP_WAIT         ("FALSE")
     ) mmcm_inst (
