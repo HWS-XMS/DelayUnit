@@ -24,18 +24,12 @@ all: synth
 
 # Vivado synthesis
 synth:
-	@echo "Synthesizing design with 17ps resolution MMCM..."
-	vivado -mode batch -source synth.tcl
+	@echo "Synthesizing design with 5ns clock cycle delay (200MHz)..."
+	vivado -mode batch -source synth.tcl -nojournal -nolog
 
 # Simulation
 sim:
-	@echo "Running MMCM testbench..."
-	cd tb && \
-	iverilog -g2012 -I../rtl \
-		../rtl/mmcm/MMCM_FINE_DELAY.sv \
-		MMCM_FINE_DELAY_TB.sv \
-		-o mmcm_tb.vvp && \
-	vvp mmcm_tb.vvp
+	@echo "No simulation targets available (removed MMCM testbenches)"
 
 # Clean build artifacts
 clean:
@@ -57,7 +51,7 @@ program:
 		echo "Error: Bitstream not found. Run 'make synth' first."; \
 		exit 1; \
 	fi
-	vivado -mode batch -source program.tcl
+	vivado -mode batch -source program.tcl -nojournal -nolog
 
 # Program SPI Flash (persistent - survives power cycle)
 program-flash:
@@ -66,4 +60,4 @@ program-flash:
 		echo "Error: Bitstream not found. Run 'make synth' first."; \
 		exit 1; \
 	fi
-	vivado -mode batch -source program_flash.tcl
+	vivado -mode batch -source program_flash.tcl -nojournal -nolog

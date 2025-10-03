@@ -14,8 +14,19 @@ build/
 *.rpt
 *.pb
 *.xsa
+*.str
+*.ltx
+vivado*.backup.*
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+*.egg
 
 # Simulation
 *.vcd
@@ -24,6 +35,8 @@ __pycache__/
 *.lxt2
 *.vvp
 *.out
+*.wdb
+*.wcfg
 
 # Vivado
 *.cache/
@@ -33,3 +46,16 @@ __pycache__/
 *.sim/
 *.srcs/
 *.xpr
+
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+clockInfo.txt
+tight_setup_hold_pins.txt
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace

@@ -7,15 +7,16 @@
 `define EDGE_FALLING 2'b10
 `define EDGE_BOTH    2'b11
 
-// Command definitions
+// Command definitions - Clock cycle delay only (5ns resolution @ 200MHz)
 `define CMD_SET_COARSE   8'h01
 `define CMD_GET_COARSE   8'h02
 `define CMD_SET_EDGE     8'h03
 `define CMD_GET_EDGE     8'h04
 `define CMD_GET_STATUS   8'h05
 `define CMD_RESET_COUNT  8'h06
-`define CMD_SET_FINE     8'h07
-`define CMD_GET_FINE     8'h08
+`define CMD_SOFT_TRIGGER 8'h07
+`define CMD_SET_WIDTH    8'h08
+`define CMD_GET_WIDTH    8'h09
 
 // Response definitions
 `define RESP_ACK         8'hAA

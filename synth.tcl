@@ -1,12 +1,10 @@
 set outputDir ./build
 file mkdir $outputDir
 
-# Read design sources
+# Read design sources - Clock cycle delay only (5ns resolution @ 200MHz)
 read_verilog -sv rtl/TRIGGER_DELAY_DEFS.vh
 read_verilog -sv rtl/core/CDC_EDGE_DETECT.sv
 read_verilog -sv rtl/core/CONFIGURABLE_DELAY.sv
-read_verilog -sv rtl/core/TRIGGER_DELAY_ENHANCED.sv
-read_verilog -sv rtl/mmcm/MMCM_FINE_DELAY.sv
 read_verilog -sv rtl/uart/UART_RX.sv
 read_verilog -sv rtl/uart/UART_TX.sv
 read_verilog -sv rtl/TRIGGER_DELAY_TOP.sv

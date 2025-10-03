@@ -26,6 +26,9 @@ set_property -dict { PACKAGE_PIN G13   IOSTANDARD LVCMOS33 } [get_ports { trigge
 ## Can connect to oscilloscope or other equipment
 set_property -dict { PACKAGE_PIN B11   IOSTANDARD LVCMOS33 } [get_ports { trigger_out }]; #IO_L4P_T0_15 Sch=ja[2]
 
+## Soft Trigger Output - Using Pmod JA Pin 3 for soft trigger pulse (connect to JA Pin 1 with jumper)
+set_property -dict { PACKAGE_PIN A11   IOSTANDARD LVCMOS33 } [get_ports { soft_trigger_out }]; #IO_L4N_T0_15 Sch=ja[3]
+
 ## Optional: Additional trigger I/O on Pmod JB for differential signals
 ## Uncomment if using differential trigger signals
 # set_property -dict { PACKAGE_PIN E15   IOSTANDARD LVCMOS33 } [get_ports { trigger_in_p }]; #IO_L11P_T1_SRCC_15 Sch=jb_p[1]
