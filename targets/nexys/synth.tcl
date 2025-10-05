@@ -2,17 +2,17 @@ set outputDir ./build
 file mkdir $outputDir
 
 # Read design sources - Clock cycle delay only (5ns resolution @ 200MHz)
-read_verilog -sv rtl/TRIGGER_DELAY_DEFS.vh
-read_verilog -sv rtl/core/CDC_EDGE_DETECT.sv
-read_verilog -sv rtl/core/CONFIGURABLE_DELAY.sv
-read_verilog -sv rtl/uart/UART_RX.sv
-read_verilog -sv rtl/uart/UART_TX.sv
-read_verilog -sv rtl/TRIGGER_DELAY_TOP.sv
+read_verilog -sv ../../rtl/TRIGGER_DELAY_DEFS.vh
+read_verilog -sv ../../rtl/core/CDC_EDGE_DETECT.sv
+read_verilog -sv ../../rtl/core/CONFIGURABLE_DELAY.sv
+read_verilog -sv ../../rtl/uart/UART_RX.sv
+read_verilog -sv ../../rtl/uart/UART_TX.sv
+read_verilog -sv ../../rtl/TRIGGER_DELAY_TOP.sv
 
-read_xdc constraints/trigger_delay_arty.xdc
+read_xdc constraints.xdc
 
-# Synthesis
-synth_design -top TRIGGER_DELAY_TOP -part xc7a35ticsg324-1L
+# Synthesis for Nexys Video (XC7A200T)
+synth_design -top TRIGGER_DELAY_TOP -part xc7a200tsbg484-1
 
 write_checkpoint -force $outputDir/post_synth.dcp
 report_timing_summary -file $outputDir/post_synth_timing_summary.rpt

@@ -1,6 +1,8 @@
 # Build directories
 build/
 .Xil/
+targets/*/build/
+targets/*/.Xil/
 
 # Build outputs
 *.bit

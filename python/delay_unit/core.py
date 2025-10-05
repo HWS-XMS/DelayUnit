@@ -46,49 +46,55 @@ class DelayUnit:
         baudrate: UART baud rate (default 1Mbaud)
     """
     
-    # Digilent Arty USB identifiers
-    ARTY_VID = 0x0403  # FTDI vendor ID
-    ARTY_PID = 0x6010  # FT2232H product ID used by Arty
-    
-    def __init__(self):
+    # Supported board USB identifiers
+    BOARD_IDS = [
+        (0x0403, 0x6010, "Digilent Arty A7 (FT2232H)"),
+        (0x0403, 0x6001, "Digilent Nexys Video (FT232R)"),
+    ]
+
+    def __init__(self, port: Optional[str] = None):
         """
         Initialize DelayUnit connection.
-        
-        Automatically searches for and connects to Digilent Arty board
-        at 1Mbaud.
-        
+
+        Args:
+            port: Serial port path (e.g., '/dev/ttyUSB2'). If None, auto-detects board.
+
         Raises:
-            RuntimeError: If Arty board not found or connection fails
+            RuntimeError: If board not found or connection fails
         """
-        port = self._find_arty_port()
         if port is None:
-            raise RuntimeError(
-                f"Digilent Arty board not found (VID:PID = {self.ARTY_VID:04X}:{self.ARTY_PID:04X}). "
-                "Please ensure the board is connected and drivers are installed."
-            )
-        
+            port = self._find_board_port()
+            if port is None:
+                vid_pid_list = ", ".join([f"{vid:04X}:{pid:04X}" for vid, pid, _ in self.BOARD_IDS])
+                raise RuntimeError(
+                    f"No supported board found (searched VID:PID = {vid_pid_list}). "
+                    "Please ensure the board is connected and drivers are installed.\n"
+                    "Alternatively, specify the port manually: DelayUnit(port='/dev/ttyUSBx')"
+                )
+
         try:
             self.ser = serial.Serial(port, 1000000, timeout=1)
             time.sleep(0.1)  # Allow serial to settle
         except serial.SerialException as e:
             raise RuntimeError(f"Failed to open serial port {port}: {e}")
-    
-    def _find_arty_port(self) -> Optional[str]:
+
+    def _find_board_port(self) -> Optional[str]:
         """
-        Search for Digilent Arty board among connected USB devices.
-        
+        Search for supported Digilent board among connected USB devices.
+
         Returns:
             Serial port path if found, None otherwise
         """
         for port_info in serial.tools.list_ports.comports():
-            if port_info.vid == self.ARTY_VID and port_info.pid == self.ARTY_PID:
-                # Arty has two serial ports (JTAG and UART), typically the second one is UART
-                # On Linux: /dev/ttyUSB1, on Windows: higher COM port number
-                # We can identify by checking if it's the second interface
-                if 'usbserial' in port_info.location or port_info.location.endswith('1'):
-                    return port_info.device
-                # If we can't determine which interface, try the port anyway
-                return port_info.device
+            for vid, pid, board_name in self.BOARD_IDS:
+                if port_info.vid == vid and port_info.pid == pid:
+                    # Arty (FT2232H) has two interfaces - prefer interface 1 for UART
+                    # Nexys Video (FT232R) has single interface - use directly
+                    if pid == 0x6010:  # FT2232H (Arty)
+                        if 'usbserial' in str(port_info.location) or str(port_info.location).endswith('1'):
+                            return port_info.device
+                    else:  # FT232R (Nexys Video) or other single-interface chips
+                        return port_info.device
         return None
     
     def close(self):
