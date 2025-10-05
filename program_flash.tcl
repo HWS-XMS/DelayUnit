@@ -24,7 +24,7 @@ puts "BIN file created: $binfile"
 puts "\nStep 2: Opening hardware and connecting..."
 
 # Open hardware
-open_hw
+open_hw_manager
 if {[current_hw_server] == ""} {
     connect_hw_server
 }
@@ -84,7 +84,7 @@ if {$mode == "QSPI"} {
 
 puts "\nStep 6: Cleaning up..."
 
-close_hw
+close_hw_manager
 
 puts "\n========================================"
 puts "SPI Flash programming complete!"
