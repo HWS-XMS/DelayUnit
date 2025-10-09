@@ -49,20 +49,18 @@
 				(hide yes)
 			)
 		)
-		(symbol "DS1124_0_1"
+		(symbol "DS1124_1_1"
 			(rectangle
 				(start -12.7 6.35)
 				(end 12.7 -8.89)
 				(stroke
 					(width 0)
-					(type default)
+					(type solid)
 				)
 				(fill
-					(type none)
+					(type background)
 				)
 			)
-		)
-		(symbol "DS1124_1_1"
 			(pin input line
 				(at -15.24 3.81 0)
 				(length 2.54)
@@ -163,7 +161,7 @@
 						)
 					)
 				)
-				(number "8"
+				(number "10"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -181,7 +179,7 @@
 						)
 					)
 				)
-				(number "8"
+				(number "9"
 					(effects
 						(font
 							(size 1.27 1.27)
