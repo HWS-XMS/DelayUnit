@@ -47,9 +47,9 @@ class DelayUnit:
     """
     
     # Supported board USB identifiers
+    # Only custom programmed DelayUnit with unique VID/PID
     BOARD_IDS = [
-        (0x0403, 0x6010, "Digilent Arty A7 (FT2232H)"),
-        (0x0403, 0x6001, "Digilent Nexys Video (FT232R)"),
+        (0x1337, 0x0099, "EMFI Lab DelayUnit"),
     ]
 
     def __init__(self, port: Optional[str] = None):
@@ -80,7 +80,7 @@ class DelayUnit:
 
     def _find_board_port(self) -> Optional[str]:
         """
-        Search for supported Digilent board among connected USB devices.
+        Search for DelayUnit with custom VID/PID among connected USB devices.
 
         Returns:
             Serial port path if found, None otherwise
@@ -88,13 +88,7 @@ class DelayUnit:
         for port_info in serial.tools.list_ports.comports():
             for vid, pid, board_name in self.BOARD_IDS:
                 if port_info.vid == vid and port_info.pid == pid:
-                    # Arty (FT2232H) has two interfaces - prefer interface 1 for UART
-                    # Nexys Video (FT232R) has single interface - use directly
-                    if pid == 0x6010:  # FT2232H (Arty)
-                        if 'usbserial' in str(port_info.location) or str(port_info.location).endswith('1'):
-                            return port_info.device
-                    else:  # FT232R (Nexys Video) or other single-interface chips
-                        return port_info.device
+                    return port_info.device
         return None
     
     def close(self):
