@@ -19,8 +19,12 @@ class Command(IntEnum):
     GET_STATUS = 0x05
     RESET_COUNT = 0x06
     SOFT_TRIGGER = 0x07
-    SET_WIDTH = 0x08
-    GET_WIDTH = 0x09
+    SET_OUTPUT_TRIGGER_WIDTH = 0x08
+    GET_OUTPUT_TRIGGER_WIDTH = 0x09
+    SET_TRIGGER_MODE = 0x0A
+    GET_TRIGGER_MODE = 0x0B
+    SET_SOFT_TRIGGER_WIDTH = 0x0C
+    GET_SOFT_TRIGGER_WIDTH = 0x0D
 
 
 class EdgeType(IntEnum):
@@ -29,6 +33,12 @@ class EdgeType(IntEnum):
     RISING = 0x01
     FALLING = 0x02
     BOTH = 0x03
+
+
+class TriggerMode(IntEnum):
+    """Trigger mode types."""
+    EXTERNAL = 0x00  # Receive trigger from DuT
+    INTERNAL = 0x01  # Generate trigger for DuT
 
 
 class DelayUnit:
@@ -224,48 +234,48 @@ class DelayUnit:
         return True
 
     @property
-    def width_cycles(self) -> Optional[int]:
+    def output_trigger_width_cycles(self) -> Optional[int]:
         """
-        Get/set output pulse width in clock cycles.
+        Get/set output trigger pulse width in clock cycles.
 
         Returns:
             Pulse width in clock cycles, or None if read fails
         """
-        self.ser.write(bytes([Command.GET_WIDTH]))
+        self.ser.write(bytes([Command.GET_OUTPUT_TRIGGER_WIDTH]))
         data = self.ser.read(4)
         if len(data) == 4:
             return struct.unpack('<I', data)[0]
         return None
 
-    @width_cycles.setter
-    def width_cycles(self, cycles: int):
+    @output_trigger_width_cycles.setter
+    def output_trigger_width_cycles(self, cycles: int):
         """
-        Set output pulse width in clock cycles.
+        Set output trigger pulse width in clock cycles.
 
         Args:
             cycles: Number of clock cycles (5ns each at 200MHz)
         """
-        self.ser.write(bytes([Command.SET_WIDTH]))
+        self.ser.write(bytes([Command.SET_OUTPUT_TRIGGER_WIDTH]))
         self.ser.write(struct.pack('<I', cycles))
 
     @property
-    def width_ns(self) -> Optional[float]:
+    def output_trigger_width_ns(self) -> Optional[float]:
         """
-        Get/set output pulse width in nanoseconds.
+        Get/set output trigger pulse width in nanoseconds.
 
         Returns:
             Pulse width in nanoseconds, or None if read fails
         """
-        cycles = self.width_cycles
+        cycles = self.output_trigger_width_cycles
         if cycles is None:
             return None
         # Each cycle is 5ns (200MHz clock)
         return cycles * 5.0
 
-    @width_ns.setter
-    def width_ns(self, nanoseconds: float):
+    @output_trigger_width_ns.setter
+    def output_trigger_width_ns(self, nanoseconds: float):
         """
-        Set output pulse width in nanoseconds.
+        Set output trigger pulse width in nanoseconds.
 
         Args:
             nanoseconds: Pulse width in nanoseconds (5ns resolution)
@@ -274,4 +284,81 @@ class DelayUnit:
         cycles = int(round(nanoseconds / 5.0))
         if cycles < 1:
             cycles = 1  # Minimum 1 cycle
-        self.width_cycles = cycles
+        self.output_trigger_width_cycles = cycles
+
+    @property
+    def trigger_mode(self) -> Optional[TriggerMode]:
+        """
+        Get/set trigger mode.
+
+        Returns:
+            TriggerMode enum value, or None if read fails
+        """
+        self.ser.write(bytes([Command.GET_TRIGGER_MODE]))
+        data = self.ser.read(1)
+        if len(data) == 1:
+            return TriggerMode(data[0])
+        return None
+
+    @trigger_mode.setter
+    def trigger_mode(self, mode: TriggerMode):
+        """
+        Set trigger mode.
+
+        Args:
+            mode: TriggerMode enum value (EXTERNAL or INTERNAL)
+        """
+        self.ser.write(bytes([Command.SET_TRIGGER_MODE, mode]))
+
+    @property
+    def soft_trigger_width_cycles(self) -> Optional[int]:
+        """
+        Get/set soft trigger pulse width in clock cycles.
+
+        Returns:
+            Pulse width in clock cycles, or None if read fails
+        """
+        self.ser.write(bytes([Command.GET_SOFT_TRIGGER_WIDTH]))
+        data = self.ser.read(4)
+        if len(data) == 4:
+            return struct.unpack('<I', data)[0]
+        return None
+
+    @soft_trigger_width_cycles.setter
+    def soft_trigger_width_cycles(self, cycles: int):
+        """
+        Set soft trigger pulse width in clock cycles.
+
+        Args:
+            cycles: Number of clock cycles (5ns each at 200MHz)
+        """
+        self.ser.write(bytes([Command.SET_SOFT_TRIGGER_WIDTH]))
+        self.ser.write(struct.pack('<I', cycles))
+
+    @property
+    def soft_trigger_width_ns(self) -> Optional[float]:
+        """
+        Get/set soft trigger pulse width in nanoseconds.
+
+        Returns:
+            Pulse width in nanoseconds, or None if read fails
+        """
+        cycles = self.soft_trigger_width_cycles
+        if cycles is None:
+            return None
+        # Each cycle is 5ns (200MHz clock)
+        return cycles * 5.0
+
+    @soft_trigger_width_ns.setter
+    def soft_trigger_width_ns(self, nanoseconds: float):
+        """
+        Set soft trigger pulse width in nanoseconds.
+
+        Args:
+            nanoseconds: Pulse width in nanoseconds (5ns resolution)
+        """
+        # Calculate cycles (5ns per cycle at 200MHz)
+        cycles = int(round(nanoseconds / 5.0))
+        if cycles < 1:
+            cycles = 1  # Minimum 1 cycle
+        self.soft_trigger_width_cycles = cycles

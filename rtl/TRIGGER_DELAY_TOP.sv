@@ -5,9 +5,9 @@
 module TRIGGER_DELAY_TOP (
     input  logic        clk,
     input  logic        rst,
-    input  logic        trigger_in,
-    output logic        trigger_out,
-    output logic        soft_trigger_out,  // Soft trigger output on JA-3
+    input  logic        trigger_in,             // PIN1: External trigger input (from DuT, or from PIN3 via test jumper)
+    output logic        trigger_delayed_out,    // PIN2: Delayed trigger output
+    output logic        soft_trigger_out,       // PIN3: Soft trigger pulse output (for monitoring or test jumper)
     input  logic        uart_rx,
     output logic        uart_tx,
     output logic [3:0]  leds
@@ -129,27 +129,38 @@ module TRIGGER_DELAY_TOP (
     logic [1:0] edge_type;
     logic [31:0] current_delay;
     logic [31:0] current_width;
+    logic [31:0] current_soft_trigger_width_cycles;
     logic [15:0] trigger_counter;
     logic trigger_pulse;
+    logic trigger_pulse_external;
     logic trigger_delayed;
     logic soft_trigger;
-    logic [7:0] soft_trigger_width;
+    logic [31:0] soft_trigger_width_counter;
+    logic soft_trigger_width_update;
+    logic [31:0] soft_trigger_width_cycles;
 
-    // Soft trigger output - multi-cycle pulse on JA-3 (make it wider for reliable CDC detection)
+    // Trigger mode: EXTERNAL (0) or INTERNAL (1)
+    // This setting determines the expected hardware setup:
+    // - EXTERNAL: PIN1 receives trigger from DuT, no jumper needed
+    // - INTERNAL: Jumper PIN3 to PIN1, soft_trigger loops back through delay
+    logic trigger_mode;
+
+    // Soft trigger output - multi-cycle pulse on JA-3 (for debugging/monitoring)
     always_ff @(posedge clk_sys_buf) begin
         if (rst_sync) begin
-            soft_trigger_width <= 8'd0;
+            soft_trigger_width_counter <= 32'd0;
         end else begin
             if (soft_trigger) begin
-                soft_trigger_width <= 8'd10;  // 50ns pulse (10 cycles @ 200MHz)
-            end else if (soft_trigger_width > 0) begin
-                soft_trigger_width <= soft_trigger_width - 1;
+                soft_trigger_width_counter <= current_soft_trigger_width_cycles;
+            end else if (soft_trigger_width_counter > 0) begin
+                soft_trigger_width_counter <= soft_trigger_width_counter - 1;
             end
         end
     end
 
-    assign soft_trigger_out = (soft_trigger_width > 0);
+    assign soft_trigger_out = (soft_trigger_width_counter > 0);
 
+    // CDC for external trigger input
     CDC_EDGE_DETECT #(
         .SYNC_STAGES(3)
     ) cdc_inst (
@@ -157,9 +168,14 @@ module TRIGGER_DELAY_TOP (
         .rst(rst_sync),
         .async_in(trigger_in),
         .edge_type(edge_type),
-        .edge_pulse(trigger_pulse),
+        .edge_pulse(trigger_pulse_external),
         .sync_out()
     );
+
+    // Trigger source MUX based on trigger mode:
+    // EXTERNAL mode (0): Use edge-detected trigger from PIN1 (from DuT or test jumper)
+    // INTERNAL mode (1): Use soft_trigger command directly (bypasses PIN1)
+    assign trigger_pulse = (trigger_mode == `TRIGGER_MODE_EXTERNAL) ? trigger_pulse_external : soft_trigger;
 
     CONFIGURABLE_DELAY #(
         .MAX_DELAY_BITS(32)
@@ -174,7 +190,7 @@ module TRIGGER_DELAY_TOP (
         .width_update(width_update)
     );
 
-    assign trigger_out = trigger_delayed;
+    assign trigger_delayed_out = trigger_delayed;
 
     // LED assignment
     assign leds = {mmcm_locked, trigger_counter[2:0]};
@@ -184,15 +200,19 @@ module TRIGGER_DELAY_TOP (
     // =========================================================================
     typedef enum {
         STATE_IDLE,
-        STATE_SET_DELAY,
-        STATE_GET_DELAY,
+        STATE_SET_COARSE,
+        STATE_GET_COARSE,
         STATE_SET_EDGE,
         STATE_GET_EDGE,
         STATE_GET_STATUS,
         STATE_RESET_COUNT,
         STATE_SOFT_TRIGGER,
-        STATE_SET_WIDTH,
-        STATE_GET_WIDTH
+        STATE_SET_OUTPUT_TRIGGER_WIDTH,
+        STATE_GET_OUTPUT_TRIGGER_WIDTH,
+        STATE_SET_TRIGGER_MODE,
+        STATE_GET_TRIGGER_MODE,
+        STATE_SET_SOFT_TRIGGER_WIDTH,
+        STATE_GET_SOFT_TRIGGER_WIDTH
     } state_t;
     state_t current_state;
 
@@ -215,9 +235,14 @@ module TRIGGER_DELAY_TOP (
             trigger_counter <= 16'd0;
             rx_delay_value <= 32'd0;
             soft_trigger <= 1'b0;
+            trigger_mode <= `TRIGGER_MODE_EXTERNAL;  // Default to external mode
+            soft_trigger_width_cycles <= 32'd10;     // Default 50ns pulse (10 cycles @ 200MHz)
+            current_soft_trigger_width_cycles <= 32'd10;
+            soft_trigger_width_update <= 1'b0;
         end else begin
             soft_trigger <= 1'b0;  // Default: no soft trigger
             width_update <= 1'b0;  // Default: no width update
+            soft_trigger_width_update <= 1'b0;  // Default: no soft trigger width update
             current_state <= current_state;
             uart_tx_en <= 1'b0;
             uart_tx_data <= uart_tx_data;
@@ -228,6 +253,7 @@ module TRIGGER_DELAY_TOP (
             current_delay <= current_delay;
             trigger_counter <= trigger_counter;
             rx_delay_value <= rx_delay_value;
+            trigger_mode <= trigger_mode;
 
             if (delay_update) begin
                 current_delay <= delay_cycles;
@@ -235,6 +261,10 @@ module TRIGGER_DELAY_TOP (
 
             if (width_update) begin
                 current_width <= output_width_cycles;
+            end
+
+            if (soft_trigger_width_update) begin
+                current_soft_trigger_width_cycles <= soft_trigger_width_cycles;
             end
 
             if (trigger_pulse) begin
@@ -246,21 +276,25 @@ module TRIGGER_DELAY_TOP (
                     if (uart_rx_data_valid) begin
                         uart_transmission_counter <= 32'd0;
                         case (uart_rx_data)
-                            `CMD_SET_COARSE:    current_state <= STATE_SET_DELAY;
-                            `CMD_GET_COARSE:    current_state <= STATE_GET_DELAY;
-                            `CMD_SET_EDGE:      current_state <= STATE_SET_EDGE;
-                            `CMD_GET_EDGE:      current_state <= STATE_GET_EDGE;
-                            `CMD_GET_STATUS:    current_state <= STATE_GET_STATUS;
-                            `CMD_RESET_COUNT:   current_state <= STATE_RESET_COUNT;
-                            `CMD_SOFT_TRIGGER:  current_state <= STATE_SOFT_TRIGGER;
-                            `CMD_SET_WIDTH:     current_state <= STATE_SET_WIDTH;
-                            `CMD_GET_WIDTH:     current_state <= STATE_GET_WIDTH;
-                            default:            current_state <= STATE_IDLE;
+                            `CMD_SET_COARSE:                 current_state <= STATE_SET_COARSE;
+                            `CMD_GET_COARSE:                 current_state <= STATE_GET_COARSE;
+                            `CMD_SET_EDGE:                   current_state <= STATE_SET_EDGE;
+                            `CMD_GET_EDGE:                   current_state <= STATE_GET_EDGE;
+                            `CMD_GET_STATUS:                 current_state <= STATE_GET_STATUS;
+                            `CMD_RESET_COUNT:                current_state <= STATE_RESET_COUNT;
+                            `CMD_SOFT_TRIGGER:               current_state <= STATE_SOFT_TRIGGER;
+                            `CMD_SET_OUTPUT_TRIGGER_WIDTH:   current_state <= STATE_SET_OUTPUT_TRIGGER_WIDTH;
+                            `CMD_GET_OUTPUT_TRIGGER_WIDTH:   current_state <= STATE_GET_OUTPUT_TRIGGER_WIDTH;
+                            `CMD_SET_TRIGGER_MODE:           current_state <= STATE_SET_TRIGGER_MODE;
+                            `CMD_GET_TRIGGER_MODE:           current_state <= STATE_GET_TRIGGER_MODE;
+                            `CMD_SET_SOFT_TRIGGER_WIDTH:     current_state <= STATE_SET_SOFT_TRIGGER_WIDTH;
+                            `CMD_GET_SOFT_TRIGGER_WIDTH:     current_state <= STATE_GET_SOFT_TRIGGER_WIDTH;
+                            default:                         current_state <= STATE_IDLE;
                         endcase
                     end
                 end
 
-                STATE_SET_DELAY: begin
+                STATE_SET_COARSE: begin
                     if (uart_transmission_counter >= 4) begin
                         delay_cycles <= rx_delay_value;
                         delay_update <= 1'b1;
@@ -278,7 +312,7 @@ module TRIGGER_DELAY_TOP (
                     end
                 end
 
-                STATE_GET_DELAY: begin
+                STATE_GET_COARSE: begin
                     if (uart_transmission_counter >= 4) begin
                         current_state <= STATE_IDLE;
                     end else begin
@@ -343,7 +377,7 @@ module TRIGGER_DELAY_TOP (
                     current_state <= STATE_IDLE;
                 end
 
-                STATE_SET_WIDTH: begin
+                STATE_SET_OUTPUT_TRIGGER_WIDTH: begin
                     if (uart_transmission_counter >= 4) begin
                         output_width_cycles <= rx_delay_value;
                         width_update <= 1'b1;
@@ -356,7 +390,7 @@ module TRIGGER_DELAY_TOP (
                     end
                 end
 
-                STATE_GET_WIDTH: begin
+                STATE_GET_OUTPUT_TRIGGER_WIDTH: begin
                     if (uart_transmission_counter >= 4) begin
                         current_state <= STATE_IDLE;
                     end else begin
@@ -366,6 +400,55 @@ module TRIGGER_DELAY_TOP (
                                 1: uart_tx_data <= current_width[15:8];
                                 2: uart_tx_data <= current_width[23:16];
                                 3: uart_tx_data <= current_width[31:24];
+                            endcase
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_SET_TRIGGER_MODE: begin
+                    if (uart_rx_data_valid) begin
+                        trigger_mode <= uart_rx_data[0];
+                        current_state <= STATE_IDLE;
+                    end
+                end
+
+                STATE_GET_TRIGGER_MODE: begin
+                    if (uart_transmission_counter >= 1) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            uart_tx_data <= {7'b0, trigger_mode};
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_SET_SOFT_TRIGGER_WIDTH: begin
+                    if (uart_transmission_counter >= 4) begin
+                        soft_trigger_width_cycles <= rx_delay_value;
+                        soft_trigger_width_update <= 1'b1;
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_rx_data_valid) begin
+                            rx_delay_value[uart_transmission_counter*8 +: 8] <= uart_rx_data;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_GET_SOFT_TRIGGER_WIDTH: begin
+                    if (uart_transmission_counter >= 4) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            case (uart_transmission_counter)
+                                0: uart_tx_data <= current_soft_trigger_width_cycles[7:0];
+                                1: uart_tx_data <= current_soft_trigger_width_cycles[15:8];
+                                2: uart_tx_data <= current_soft_trigger_width_cycles[23:16];
+                                3: uart_tx_data <= current_soft_trigger_width_cycles[31:24];
                             endcase
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;

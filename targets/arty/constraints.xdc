@@ -18,15 +18,16 @@ set_property -dict { PACKAGE_PIN T10   IOSTANDARD LVCMOS33 } [get_ports { leds[3
 set_property -dict { PACKAGE_PIN D10   IOSTANDARD LVCMOS33 } [get_ports { uart_tx }]; #IO_L19N_T3_VREF_16 Sch=uart_rxd_out (FPGA TX -> USB RX)
 set_property -dict { PACKAGE_PIN A9    IOSTANDARD LVCMOS33 } [get_ports { uart_rx }]; #IO_L14N_T2_SRCC_16 Sch=uart_txd_in (USB TX -> FPGA RX)
 
-## Trigger Input - Using Pmod JA Pin 1 for trigger input
-## Can connect external trigger source here
+## Trigger Input - Using Pmod JA Pin 1
+## EXTERNAL mode: receives trigger from DuT
+## INTERNAL mode: receives trigger from PIN3 via jumper
 set_property -dict { PACKAGE_PIN G13   IOSTANDARD LVCMOS33 } [get_ports { trigger_in }]; #IO_0_15 Sch=ja[1]
 
-## Trigger Output - Using Pmod JA Pin 2 for delayed trigger output
-## Can connect to oscilloscope or other equipment
-set_property -dict { PACKAGE_PIN B11   IOSTANDARD LVCMOS33 } [get_ports { trigger_out }]; #IO_L4P_T0_15 Sch=ja[2]
+## Trigger Delayed Output - Using Pmod JA Pin 2 for delayed trigger output
+## Outputs delayed version of trigger received on PIN1
+set_property -dict { PACKAGE_PIN B11   IOSTANDARD LVCMOS33 } [get_ports { trigger_delayed_out }]; #IO_L4P_T0_15 Sch=ja[2]
 
-## Soft Trigger Output - Using Pmod JA Pin 3 for soft trigger pulse (connect to JA Pin 1 with jumper)
+## Soft Trigger Output - Using Pmod JA Pin 3 for soft trigger pulse (for debugging/monitoring)
 set_property -dict { PACKAGE_PIN A11   IOSTANDARD LVCMOS33 } [get_ports { soft_trigger_out }]; #IO_L4N_T0_15 Sch=ja[3]
 
 ## Optional: Additional trigger I/O on Pmod JB for differential signals
@@ -43,8 +44,10 @@ set_property CFGBVS VCCO [current_design]
 ## Timing constraints for I/O
 set_input_delay -clock [get_clocks sys_clk_pin] -min -add_delay 2.000 [get_ports trigger_in]
 set_input_delay -clock [get_clocks sys_clk_pin] -max -add_delay 5.000 [get_ports trigger_in]
-set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports trigger_out]
-set_output_delay -clock [get_clocks sys_clk_pin] -max -add_delay 2.000 [get_ports trigger_out]
+set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports trigger_delayed_out]
+set_output_delay -clock [get_clocks sys_clk_pin] -max -add_delay 2.000 [get_ports trigger_delayed_out]
+set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports soft_trigger_out]
+set_output_delay -clock [get_clocks sys_clk_pin] -max -add_delay 2.000 [get_ports soft_trigger_out]
 
 ## UART timing constraints - for 1Mbaud
 set_input_delay -clock [get_clocks sys_clk_pin] -min -add_delay 2.000 [get_ports uart_rx]
