@@ -25,6 +25,16 @@ class Command(IntEnum):
     GET_TRIGGER_MODE = 0x0B
     SET_SOFT_TRIGGER_WIDTH = 0x0C
     GET_SOFT_TRIGGER_WIDTH = 0x0D
+    SET_COUNTER_MODE = 0x0E
+    GET_COUNTER_MODE = 0x0F
+    SET_EDGE_COUNT_TARGET = 0x10
+    GET_EDGE_COUNT_TARGET = 0x11
+    RESET_EDGE_COUNT = 0x12
+    ARM = 0x13
+    DISARM = 0x14
+    SET_ARMED_MODE = 0x15
+    GET_ARMED_MODE = 0x16
+    GET_ARMED = 0x17
 
 
 class EdgeType(IntEnum):
@@ -39,6 +49,18 @@ class TriggerMode(IntEnum):
     """Trigger mode types."""
     EXTERNAL = 0x00  # Receive trigger from DuT
     INTERNAL = 0x01  # Generate trigger for DuT
+
+
+class CounterMode(IntEnum):
+    """Counter trigger mode types."""
+    DISABLED = 0x00  # Trigger on every edge
+    ENABLED = 0x01   # Trigger only on Nth edge
+
+
+class ArmedMode(IntEnum):
+    """Armed mode types."""
+    SINGLE = 0x00  # Disarm after first trigger (one-shot)
+    REPEAT = 0x01  # Stay armed, trigger repeatedly
 
 
 class DelayUnit:
@@ -157,8 +179,12 @@ class DelayUnit:
         Set coarse delay in clock cycles.
 
         Args:
-            cycles: Number of clock cycles (5ns each at 200MHz)
+            cycles: Number of clock cycles (5ns each at 200MHz), minimum 1
         """
+        if cycles < 1:
+            import warnings
+            warnings.warn(f"coarse delay must be >= 1 for proper operation, got {cycles}, using 1")
+            cycles = 1  # Minimum 1 cycle for proper state machine operation
         self.ser.write(bytes([Command.SET_COARSE]))
         self.ser.write(struct.pack('<I', cycles))
     
@@ -362,3 +388,127 @@ class DelayUnit:
         if cycles < 1:
             cycles = 1  # Minimum 1 cycle
         self.soft_trigger_width_cycles = cycles
+
+    @property
+    def counter_mode(self) -> Optional[CounterMode]:
+        """
+        Get/set counter trigger mode.
+
+        When enabled, trigger only fires after N edges (set by edge_count_target).
+
+        Returns:
+            CounterMode enum value, or None if read fails
+        """
+        self.ser.write(bytes([Command.GET_COUNTER_MODE]))
+        data = self.ser.read(1)
+        if len(data) == 1:
+            return CounterMode(data[0])
+        return None
+
+    @counter_mode.setter
+    def counter_mode(self, mode: CounterMode):
+        """
+        Set counter trigger mode.
+
+        Args:
+            mode: CounterMode enum value (DISABLED or ENABLED)
+        """
+        self.ser.write(bytes([Command.SET_COUNTER_MODE, mode]))
+
+    @property
+    def edge_count_target(self) -> Optional[int]:
+        """
+        Get/set edge count target for counter trigger mode.
+
+        When counter_mode is ENABLED, trigger fires on the Nth edge.
+
+        Returns:
+            Edge count target, or None if read fails
+        """
+        self.ser.write(bytes([Command.GET_EDGE_COUNT_TARGET]))
+        data = self.ser.read(4)
+        if len(data) == 4:
+            return struct.unpack('<I', data)[0]
+        return None
+
+    @edge_count_target.setter
+    def edge_count_target(self, count: int):
+        """
+        Set edge count target for counter trigger mode.
+
+        Args:
+            count: Number of edges before trigger fires (1 = first edge)
+        """
+        self.ser.write(bytes([Command.SET_EDGE_COUNT_TARGET]))
+        self.ser.write(struct.pack('<I', count))
+
+    def reset_edge_count(self) -> bool:
+        """
+        Reset the edge counter to zero.
+
+        Returns:
+            True if successful
+        """
+        self.ser.write(bytes([Command.RESET_EDGE_COUNT]))
+        return True
+
+    def arm(self) -> bool:
+        """
+        Arm the trigger. Only when armed will triggers be generated.
+
+        Returns:
+            True if successful
+        """
+        self.ser.write(bytes([Command.ARM]))
+        return True
+
+    def disarm(self) -> bool:
+        """
+        Disarm the trigger. No triggers will be generated while disarmed.
+
+        Returns:
+            True if successful
+        """
+        self.ser.write(bytes([Command.DISARM]))
+        return True
+
+    @property
+    def armed(self) -> Optional[bool]:
+        """
+        Get current armed state.
+
+        Returns:
+            True if armed, False if disarmed, None if read fails
+        """
+        self.ser.write(bytes([Command.GET_ARMED]))
+        data = self.ser.read(1)
+        if len(data) == 1:
+            return bool(data[0])
+        return None
+
+    @property
+    def armed_mode(self) -> Optional[ArmedMode]:
+        """
+        Get/set armed mode.
+
+        SINGLE: Disarm after first trigger (one-shot)
+        REPEAT: Stay armed, trigger repeatedly
+
+        Returns:
+            ArmedMode enum value, or None if read fails
+        """
+        self.ser.write(bytes([Command.GET_ARMED_MODE]))
+        data = self.ser.read(1)
+        if len(data) == 1:
+            return ArmedMode(data[0])
+        return None
+
+    @armed_mode.setter
+    def armed_mode(self, mode: ArmedMode):
+        """
+        Set armed mode.
+
+        Args:
+            mode: ArmedMode enum value (SINGLE or REPEAT)
+        """
+        self.ser.write(bytes([Command.SET_ARMED_MODE, mode]))

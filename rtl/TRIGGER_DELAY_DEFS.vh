@@ -11,6 +11,14 @@
 `define TRIGGER_MODE_EXTERNAL 1'b0
 `define TRIGGER_MODE_INTERNAL 1'b1
 
+// Counter trigger mode - trigger only after N edges
+`define COUNTER_MODE_DISABLED 1'b0
+`define COUNTER_MODE_ENABLED  1'b1
+
+// Armed mode - gate trigger output
+`define ARMED_MODE_SINGLE     1'b0  // Disarm after first trigger (one-shot)
+`define ARMED_MODE_REPEAT     1'b1  // Stay armed, trigger repeatedly
+
 // Command definitions - Clock cycle delay only (5ns resolution @ 200MHz)
 `define CMD_SET_COARSE                 8'h01
 `define CMD_GET_COARSE                 8'h02
@@ -25,6 +33,16 @@
 `define CMD_GET_TRIGGER_MODE           8'h0B
 `define CMD_SET_SOFT_TRIGGER_WIDTH     8'h0C
 `define CMD_GET_SOFT_TRIGGER_WIDTH     8'h0D
+`define CMD_SET_COUNTER_MODE           8'h0E
+`define CMD_GET_COUNTER_MODE           8'h0F
+`define CMD_SET_EDGE_COUNT_TARGET      8'h10
+`define CMD_GET_EDGE_COUNT_TARGET      8'h11
+`define CMD_RESET_EDGE_COUNT           8'h12
+`define CMD_ARM                        8'h13
+`define CMD_DISARM                     8'h14
+`define CMD_SET_ARMED_MODE             8'h15
+`define CMD_GET_ARMED_MODE             8'h16
+`define CMD_GET_ARMED                  8'h17
 
 // Response definitions
 `define RESP_ACK         8'hAA

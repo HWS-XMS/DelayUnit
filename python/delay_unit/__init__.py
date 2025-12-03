@@ -5,10 +5,10 @@ A Python package for controlling FPGA-based trigger delay systems
 with 20.12ps resolution using Xilinx MMCM technology.
 """
 
-from .core import DelayUnit, EdgeType, Command, TriggerMode
+from .core import DelayUnit, EdgeType, Command, TriggerMode, CounterMode, ArmedMode
 from .version import __version__
 
-__all__ = ['DelayUnit', 'EdgeType', 'Command', 'TriggerMode', '__version__']
+__all__ = ['DelayUnit', 'EdgeType', 'Command', 'TriggerMode', 'CounterMode', 'ArmedMode', '__version__']
 
 # Package metadata
 __author__ = 'Marvin Sass'

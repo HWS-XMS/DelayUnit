@@ -145,6 +145,16 @@ module TRIGGER_DELAY_TOP (
     // - INTERNAL: Jumper PIN3 to PIN1, soft_trigger loops back through delay
     logic trigger_mode;
 
+    // Counter trigger mode - only trigger after N edges
+    logic counter_mode;
+    logic [31:0] edge_count_target;
+    logic [31:0] edge_count_current;
+    logic counter_trigger_pulse;
+
+    // Armed state - gate trigger output
+    logic armed;
+    logic armed_mode;  // SINGLE (0) = disarm after trigger, REPEAT (1) = stay armed
+
     // Soft trigger output - multi-cycle pulse on JA-3 (for debugging/monitoring)
     always_ff @(posedge clk_sys_buf) begin
         if (rst_sync) begin
@@ -172,10 +182,60 @@ module TRIGGER_DELAY_TOP (
         .sync_out()
     );
 
-    // Trigger source MUX based on trigger mode:
-    // EXTERNAL mode (0): Use edge-detected trigger from PIN1 (from DuT or test jumper)
+    // Counter trigger logic - count edges and trigger on Nth edge
+    // Only count when armed to prevent accumulated counts during setup
+    logic edge_count_reset;
+    always_ff @(posedge clk_sys_buf) begin
+        if (rst_sync || edge_count_reset) begin
+            edge_count_current <= 32'd0;
+            counter_trigger_pulse <= 1'b0;
+        end else begin
+            counter_trigger_pulse <= 1'b0;
+            edge_count_current <= edge_count_current;
+            if (trigger_pulse_external && armed) begin
+                if (counter_mode == `COUNTER_MODE_ENABLED) begin
+                    if (edge_count_current + 1 >= edge_count_target) begin
+                        counter_trigger_pulse <= 1'b1;
+                        edge_count_current <= 32'd0;  // Auto-reset after trigger
+                    end else begin
+                        edge_count_current <= edge_count_current + 1;
+                    end
+                end
+            end
+        end
+    end
+
+    // Trigger source MUX based on trigger mode and counter mode:
+    // EXTERNAL mode (0) + counter disabled: Use edge-detected trigger from PIN1
+    // EXTERNAL mode (0) + counter enabled: Use counter_trigger_pulse (Nth edge)
     // INTERNAL mode (1): Use soft_trigger command directly (bypasses PIN1)
-    assign trigger_pulse = (trigger_mode == `TRIGGER_MODE_EXTERNAL) ? trigger_pulse_external : soft_trigger;
+    logic external_trigger_selected;
+    logic trigger_pulse_ungated;
+    assign external_trigger_selected = (counter_mode == `COUNTER_MODE_ENABLED) ? counter_trigger_pulse : trigger_pulse_external;
+    assign trigger_pulse_ungated = (trigger_mode == `TRIGGER_MODE_EXTERNAL) ? external_trigger_selected : soft_trigger;
+
+    // Gate trigger with armed state
+    assign trigger_pulse = trigger_pulse_ungated && armed;
+
+    // Auto-disarm logic for SINGLE mode
+    logic arm_cmd;      // Set by state machine
+    logic disarm_cmd;   // Set by state machine
+    always_ff @(posedge clk_sys_buf) begin
+        if (rst_sync) begin
+            armed <= 1'b0;
+        end else begin
+            if (disarm_cmd) begin
+                armed <= 1'b0;
+            end else if (arm_cmd) begin
+                armed <= 1'b1;
+            end else if (trigger_pulse_ungated && armed && armed_mode == `ARMED_MODE_SINGLE) begin
+                // Auto-disarm after trigger in SINGLE mode
+                armed <= 1'b0;
+            end else begin
+                armed <= armed;
+            end
+        end
+    end
 
     CONFIGURABLE_DELAY #(
         .MAX_DELAY_BITS(32)
@@ -212,7 +272,17 @@ module TRIGGER_DELAY_TOP (
         STATE_SET_TRIGGER_MODE,
         STATE_GET_TRIGGER_MODE,
         STATE_SET_SOFT_TRIGGER_WIDTH,
-        STATE_GET_SOFT_TRIGGER_WIDTH
+        STATE_GET_SOFT_TRIGGER_WIDTH,
+        STATE_SET_COUNTER_MODE,
+        STATE_GET_COUNTER_MODE,
+        STATE_SET_EDGE_COUNT_TARGET,
+        STATE_GET_EDGE_COUNT_TARGET,
+        STATE_RESET_EDGE_COUNT,
+        STATE_ARM,
+        STATE_DISARM,
+        STATE_SET_ARMED_MODE,
+        STATE_GET_ARMED_MODE,
+        STATE_GET_ARMED
     } state_t;
     state_t current_state;
 
@@ -239,10 +309,19 @@ module TRIGGER_DELAY_TOP (
             soft_trigger_width_cycles <= 32'd10;     // Default 50ns pulse (10 cycles @ 200MHz)
             current_soft_trigger_width_cycles <= 32'd10;
             soft_trigger_width_update <= 1'b0;
+            counter_mode <= `COUNTER_MODE_DISABLED;
+            edge_count_target <= 32'd1;              // Default: trigger on 1st edge
+            edge_count_reset <= 1'b0;
+            armed_mode <= `ARMED_MODE_SINGLE;        // Default: disarm after trigger
+            arm_cmd <= 1'b0;
+            disarm_cmd <= 1'b0;
         end else begin
             soft_trigger <= 1'b0;  // Default: no soft trigger
             width_update <= 1'b0;  // Default: no width update
             soft_trigger_width_update <= 1'b0;  // Default: no soft trigger width update
+            edge_count_reset <= 1'b0;  // Default: no edge count reset
+            arm_cmd <= 1'b0;  // Default: no arm command
+            disarm_cmd <= 1'b0;  // Default: no disarm command
             current_state <= current_state;
             uart_tx_en <= 1'b0;
             uart_tx_data <= uart_tx_data;
@@ -254,6 +333,13 @@ module TRIGGER_DELAY_TOP (
             trigger_counter <= trigger_counter;
             rx_delay_value <= rx_delay_value;
             trigger_mode <= trigger_mode;
+            counter_mode <= counter_mode;
+            edge_count_target <= edge_count_target;
+            armed_mode <= armed_mode;
+            output_width_cycles <= output_width_cycles;
+            current_width <= current_width;
+            soft_trigger_width_cycles <= soft_trigger_width_cycles;
+            current_soft_trigger_width_cycles <= current_soft_trigger_width_cycles;
 
             if (delay_update) begin
                 current_delay <= delay_cycles;
@@ -289,6 +375,16 @@ module TRIGGER_DELAY_TOP (
                             `CMD_GET_TRIGGER_MODE:           current_state <= STATE_GET_TRIGGER_MODE;
                             `CMD_SET_SOFT_TRIGGER_WIDTH:     current_state <= STATE_SET_SOFT_TRIGGER_WIDTH;
                             `CMD_GET_SOFT_TRIGGER_WIDTH:     current_state <= STATE_GET_SOFT_TRIGGER_WIDTH;
+                            `CMD_SET_COUNTER_MODE:           current_state <= STATE_SET_COUNTER_MODE;
+                            `CMD_GET_COUNTER_MODE:           current_state <= STATE_GET_COUNTER_MODE;
+                            `CMD_SET_EDGE_COUNT_TARGET:      current_state <= STATE_SET_EDGE_COUNT_TARGET;
+                            `CMD_GET_EDGE_COUNT_TARGET:      current_state <= STATE_GET_EDGE_COUNT_TARGET;
+                            `CMD_RESET_EDGE_COUNT:           current_state <= STATE_RESET_EDGE_COUNT;
+                            `CMD_ARM:                        current_state <= STATE_ARM;
+                            `CMD_DISARM:                     current_state <= STATE_DISARM;
+                            `CMD_SET_ARMED_MODE:             current_state <= STATE_SET_ARMED_MODE;
+                            `CMD_GET_ARMED_MODE:             current_state <= STATE_GET_ARMED_MODE;
+                            `CMD_GET_ARMED:                  current_state <= STATE_GET_ARMED;
                             default:                         current_state <= STATE_IDLE;
                         endcase
                     end
@@ -450,6 +546,100 @@ module TRIGGER_DELAY_TOP (
                                 2: uart_tx_data <= current_soft_trigger_width_cycles[23:16];
                                 3: uart_tx_data <= current_soft_trigger_width_cycles[31:24];
                             endcase
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_SET_COUNTER_MODE: begin
+                    if (uart_rx_data_valid) begin
+                        counter_mode <= uart_rx_data[0];
+                        current_state <= STATE_IDLE;
+                    end
+                end
+
+                STATE_GET_COUNTER_MODE: begin
+                    if (uart_transmission_counter >= 1) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            uart_tx_data <= {7'b0, counter_mode};
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_SET_EDGE_COUNT_TARGET: begin
+                    if (uart_transmission_counter >= 4) begin
+                        edge_count_target <= rx_delay_value;
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_rx_data_valid) begin
+                            rx_delay_value[uart_transmission_counter*8 +: 8] <= uart_rx_data;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_GET_EDGE_COUNT_TARGET: begin
+                    if (uart_transmission_counter >= 4) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            case (uart_transmission_counter)
+                                0: uart_tx_data <= edge_count_target[7:0];
+                                1: uart_tx_data <= edge_count_target[15:8];
+                                2: uart_tx_data <= edge_count_target[23:16];
+                                3: uart_tx_data <= edge_count_target[31:24];
+                            endcase
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_RESET_EDGE_COUNT: begin
+                    edge_count_reset <= 1'b1;
+                    current_state <= STATE_IDLE;
+                end
+
+                STATE_ARM: begin
+                    arm_cmd <= 1'b1;
+                    current_state <= STATE_IDLE;
+                end
+
+                STATE_DISARM: begin
+                    disarm_cmd <= 1'b1;
+                    current_state <= STATE_IDLE;
+                end
+
+                STATE_SET_ARMED_MODE: begin
+                    if (uart_rx_data_valid) begin
+                        armed_mode <= uart_rx_data[0];
+                        current_state <= STATE_IDLE;
+                    end
+                end
+
+                STATE_GET_ARMED_MODE: begin
+                    if (uart_transmission_counter >= 1) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            uart_tx_data <= {7'b0, armed_mode};
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_GET_ARMED: begin
+                    if (uart_transmission_counter >= 1) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            uart_tx_data <= {7'b0, armed};
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;
                         end
