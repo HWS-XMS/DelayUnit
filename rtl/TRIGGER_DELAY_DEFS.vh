@@ -44,6 +44,12 @@
 `define CMD_GET_ARMED_MODE             8'h16
 `define CMD_GET_ARMED                  8'h17
 
+// Fine delay commands - Sub-cycle resolution (~9ps per step)
+`define CMD_SET_FINE_OFFSET            8'h18
+`define CMD_GET_FINE_OFFSET            8'h19
+`define CMD_SET_FINE_WIDTH             8'h1A
+`define CMD_GET_FINE_WIDTH             8'h1B
+
 // Response definitions
 `define RESP_ACK         8'hAA
 `define RESP_NACK        8'h55

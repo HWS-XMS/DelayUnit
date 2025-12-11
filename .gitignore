@@ -3,6 +3,7 @@ build/
 .Xil/
 targets/*/build/
 targets/*/.Xil/
+xsim.dir/
 
 # Build outputs
 *.bit

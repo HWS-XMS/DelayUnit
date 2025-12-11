@@ -1,9 +1,11 @@
 set outputDir ./build
 file mkdir $outputDir
 
-# Read design sources - Clock cycle delay only (5ns resolution @ 200MHz)
+# Read design sources - Coarse (5ns) + Fine (~9ps) delay resolution
 read_verilog -sv ../../rtl/TRIGGER_DELAY_DEFS.vh
 read_verilog -sv ../../rtl/core/CDC_EDGE_DETECT.sv
+read_verilog -sv ../../rtl/core/MMCM_PHASESHIFT.sv
+read_verilog -sv ../../rtl/core/FINE_DELAY.sv
 read_verilog -sv ../../rtl/core/CONFIGURABLE_DELAY.sv
 read_verilog -sv ../../rtl/uart/UART_RX.sv
 read_verilog -sv ../../rtl/uart/UART_TX.sv

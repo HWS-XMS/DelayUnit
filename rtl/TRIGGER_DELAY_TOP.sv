@@ -17,67 +17,44 @@ module TRIGGER_DELAY_TOP (
     localparam BAUD_RATE = 1_000_000;
 
     // =========================================================================
-    // MMCM - Generate 200MHz from 100MHz input
+    // FINE_DELAY - Generate 200MHz clocks with phase shifting capability
+    // Provides: clk_sys (main), clk_offset (pulse start), clk_width (pulse end)
     // =========================================================================
-    logic clk_sys;
-    logic mmcm_locked;
-    logic clkfb, clkfb_buf;
-
-    MMCME2_ADV #(
-        .BANDWIDTH            ("OPTIMIZED"),
-        .CLKFBOUT_MULT_F      (10.0),       // 100MHz × 10 = 1000MHz VCO
-        .CLKFBOUT_PHASE       (0.0),
-        .CLKFBOUT_USE_FINE_PS ("FALSE"),
-        .CLKIN1_PERIOD        (10.0),       // 100MHz input
-        .CLKIN2_PERIOD        (0.0),
-        .CLKOUT0_DIVIDE_F     (5.0),        // 1000MHz / 5 = 200MHz
-        .CLKOUT0_DUTY_CYCLE   (0.5),
-        .CLKOUT0_PHASE        (0.0),
-        .CLKOUT0_USE_FINE_PS  ("FALSE"),
-        .COMPENSATION         ("ZHOLD"),
-        .DIVCLK_DIVIDE        (1),
-        .REF_JITTER1          (0.01),
-        .STARTUP_WAIT         ("FALSE")
-    ) mmcm_sys (
-        .CLKOUT0              (clk_sys),
-        .CLKOUT0B             (),
-        .CLKOUT1              (),
-        .CLKOUT1B             (),
-        .CLKOUT2              (),
-        .CLKOUT2B             (),
-        .CLKOUT3              (),
-        .CLKOUT3B             (),
-        .CLKOUT4              (),
-        .CLKOUT5              (),
-        .CLKOUT6              (),
-        .CLKFBOUT             (clkfb),
-        .CLKFBOUTB            (),
-        .LOCKED               (mmcm_locked),
-        .CLKINSTOPPED         (),
-        .CLKFBSTOPPED         (),
-        .CLKIN1               (clk),
-        .CLKIN2               (1'b0),
-        .CLKINSEL             (1'b1),
-        .CLKFBIN              (clkfb_buf),
-        .PSCLK                (1'b0),
-        .PSEN                 (1'b0),
-        .PSINCDEC             (1'b0),
-        .PSDONE               (),
-        .DADDR                (7'h0),
-        .DCLK                 (1'b0),
-        .DEN                  (1'b0),
-        .DI                   (16'h0),
-        .DWE                  (1'b0),
-        .DO                   (),
-        .DRDY                 (),
-        .PWRDWN               (1'b0),
-        .RST                  (rst)
-    );
-
-    BUFG clkfb_bufg (.I(clkfb), .O(clkfb_buf));
-
     logic clk_sys_buf;
-    BUFG sys_bufg (.I(clk_sys), .O(clk_sys_buf));
+    logic clk_offset;
+    logic clk_width;
+    logic mmcm_locked;
+
+    // Fine delay control signals
+    logic [31:0] fine_offset_target;
+    logic fine_offset_configure;
+    logic fine_offset_configured;
+    logic [31:0] fine_width_target;
+    logic fine_width_configure;
+    logic fine_width_configured;
+    logic phase_shift_ready;
+
+    // Current fine delay values (tracked locally)
+    logic [31:0] current_fine_offset;
+    logic [31:0] current_fine_width;
+
+    FINE_DELAY #(
+        .PHASE_WIDTH(32)
+    ) fine_delay_inst (
+        .clk_in             (clk),
+        .rst                (rst),
+        .offset_target      (fine_offset_target),
+        .offset_configure   (fine_offset_configure),
+        .offset_configured  (fine_offset_configured),
+        .width_target       (fine_width_target),
+        .width_configure    (fine_width_configure),
+        .width_configured   (fine_width_configured),
+        .clk_out            (clk_sys_buf),
+        .clk_offset         (clk_offset),
+        .clk_width          (clk_width),
+        .locked             (mmcm_locked),
+        .phase_shift_ready  (phase_shift_ready)
+    );
 
     // Reset synchronization
     logic rst_sync;
@@ -241,6 +218,8 @@ module TRIGGER_DELAY_TOP (
         .MAX_DELAY_BITS(32)
     ) delay_inst (
         .clk(clk_sys_buf),
+        .clk_offset(clk_offset),
+        .clk_width(clk_width),
         .rst(rst_sync),
         .trigger_in(trigger_pulse),
         .trigger_out(trigger_delayed),
@@ -282,7 +261,13 @@ module TRIGGER_DELAY_TOP (
         STATE_DISARM,
         STATE_SET_ARMED_MODE,
         STATE_GET_ARMED_MODE,
-        STATE_GET_ARMED
+        STATE_GET_ARMED,
+        STATE_SET_FINE_OFFSET,
+        STATE_GET_FINE_OFFSET,
+        STATE_SET_FINE_WIDTH,
+        STATE_GET_FINE_WIDTH,
+        STATE_WAIT_FINE_OFFSET,
+        STATE_WAIT_FINE_WIDTH
     } state_t;
     state_t current_state;
 
@@ -315,6 +300,13 @@ module TRIGGER_DELAY_TOP (
             armed_mode <= `ARMED_MODE_SINGLE;        // Default: disarm after trigger
             arm_cmd <= 1'b0;
             disarm_cmd <= 1'b0;
+            // Fine delay registers
+            fine_offset_target <= 32'd0;
+            fine_offset_configure <= 1'b0;
+            fine_width_target <= 32'd0;
+            fine_width_configure <= 1'b0;
+            current_fine_offset <= 32'd0;
+            current_fine_width <= 32'd0;
         end else begin
             soft_trigger <= 1'b0;  // Default: no soft trigger
             width_update <= 1'b0;  // Default: no width update
@@ -322,6 +314,8 @@ module TRIGGER_DELAY_TOP (
             edge_count_reset <= 1'b0;  // Default: no edge count reset
             arm_cmd <= 1'b0;  // Default: no arm command
             disarm_cmd <= 1'b0;  // Default: no disarm command
+            fine_offset_configure <= 1'b0;  // Default: no fine offset configure
+            fine_width_configure <= 1'b0;   // Default: no fine width configure
             current_state <= current_state;
             uart_tx_en <= 1'b0;
             uart_tx_data <= uart_tx_data;
@@ -385,6 +379,10 @@ module TRIGGER_DELAY_TOP (
                             `CMD_SET_ARMED_MODE:             current_state <= STATE_SET_ARMED_MODE;
                             `CMD_GET_ARMED_MODE:             current_state <= STATE_GET_ARMED_MODE;
                             `CMD_GET_ARMED:                  current_state <= STATE_GET_ARMED;
+                            `CMD_SET_FINE_OFFSET:            current_state <= STATE_SET_FINE_OFFSET;
+                            `CMD_GET_FINE_OFFSET:            current_state <= STATE_GET_FINE_OFFSET;
+                            `CMD_SET_FINE_WIDTH:             current_state <= STATE_SET_FINE_WIDTH;
+                            `CMD_GET_FINE_WIDTH:             current_state <= STATE_GET_FINE_WIDTH;
                             default:                         current_state <= STATE_IDLE;
                         endcase
                     end
@@ -445,17 +443,51 @@ module TRIGGER_DELAY_TOP (
                 end
 
                 STATE_GET_STATUS: begin
-                    if (uart_transmission_counter >= 6) begin
+                    // Extended status: 26 bytes total
+                    // [0:1]   trigger_counter (2 bytes)
+                    // [2:5]   current_delay (4 bytes)
+                    // [6:9]   current_fine_offset (4 bytes, signed)
+                    // [10:13] current_width (4 bytes)
+                    // [14:17] current_fine_width (4 bytes, signed)
+                    // [18]    armed (1 byte)
+                    // [19]    trigger_mode (1 byte)
+                    // [20]    armed_mode (1 byte)
+                    // [21]    counter_mode (1 byte)
+                    // [22]    mmcm_locked (1 byte)
+                    // [23]    phase_shift_ready (1 byte)
+                    // [24]    edge_type (1 byte)
+                    // [25]    reserved (1 byte)
+                    if (uart_transmission_counter >= 26) begin
                         current_state <= STATE_IDLE;
                     end else begin
                         if (uart_tx_ready) begin
                             case (uart_transmission_counter)
-                                0: uart_tx_data <= trigger_counter[7:0];
-                                1: uart_tx_data <= trigger_counter[15:8];
-                                2: uart_tx_data <= current_delay[7:0];
-                                3: uart_tx_data <= current_delay[15:8];
-                                4: uart_tx_data <= current_delay[23:16];
-                                5: uart_tx_data <= current_delay[31:24];
+                                0:  uart_tx_data <= trigger_counter[7:0];
+                                1:  uart_tx_data <= trigger_counter[15:8];
+                                2:  uart_tx_data <= current_delay[7:0];
+                                3:  uart_tx_data <= current_delay[15:8];
+                                4:  uart_tx_data <= current_delay[23:16];
+                                5:  uart_tx_data <= current_delay[31:24];
+                                6:  uart_tx_data <= current_fine_offset[7:0];
+                                7:  uart_tx_data <= current_fine_offset[15:8];
+                                8:  uart_tx_data <= current_fine_offset[23:16];
+                                9:  uart_tx_data <= current_fine_offset[31:24];
+                                10: uart_tx_data <= current_width[7:0];
+                                11: uart_tx_data <= current_width[15:8];
+                                12: uart_tx_data <= current_width[23:16];
+                                13: uart_tx_data <= current_width[31:24];
+                                14: uart_tx_data <= current_fine_width[7:0];
+                                15: uart_tx_data <= current_fine_width[15:8];
+                                16: uart_tx_data <= current_fine_width[23:16];
+                                17: uart_tx_data <= current_fine_width[31:24];
+                                18: uart_tx_data <= {7'd0, armed};
+                                19: uart_tx_data <= {7'd0, trigger_mode};
+                                20: uart_tx_data <= {7'd0, armed_mode};
+                                21: uart_tx_data <= {7'd0, counter_mode};
+                                22: uart_tx_data <= {7'd0, mmcm_locked};
+                                23: uart_tx_data <= {7'd0, phase_shift_ready};
+                                24: uart_tx_data <= {6'd0, edge_type};
+                                25: uart_tx_data <= 8'd0;  // Reserved
                             endcase
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;
@@ -640,6 +672,86 @@ module TRIGGER_DELAY_TOP (
                     end else begin
                         if (uart_tx_ready) begin
                             uart_tx_data <= {7'b0, armed};
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                // =========================================================
+                // Fine delay offset commands
+                // =========================================================
+                STATE_SET_FINE_OFFSET: begin
+                    if (uart_transmission_counter >= 4) begin
+                        fine_offset_target <= rx_delay_value;
+                        fine_offset_configure <= 1'b1;
+                        current_state <= STATE_WAIT_FINE_OFFSET;
+                    end else begin
+                        if (uart_rx_data_valid) begin
+                            rx_delay_value[uart_transmission_counter*8 +: 8] <= uart_rx_data;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_WAIT_FINE_OFFSET: begin
+                    if (fine_offset_configured) begin
+                        current_fine_offset <= fine_offset_target;
+                        current_state <= STATE_IDLE;
+                    end
+                end
+
+                STATE_GET_FINE_OFFSET: begin
+                    if (uart_transmission_counter >= 4) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            case (uart_transmission_counter)
+                                0: uart_tx_data <= current_fine_offset[7:0];
+                                1: uart_tx_data <= current_fine_offset[15:8];
+                                2: uart_tx_data <= current_fine_offset[23:16];
+                                3: uart_tx_data <= current_fine_offset[31:24];
+                            endcase
+                            uart_tx_en <= 1'b1;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                // =========================================================
+                // Fine delay width commands
+                // =========================================================
+                STATE_SET_FINE_WIDTH: begin
+                    if (uart_transmission_counter >= 4) begin
+                        fine_width_target <= rx_delay_value;
+                        fine_width_configure <= 1'b1;
+                        current_state <= STATE_WAIT_FINE_WIDTH;
+                    end else begin
+                        if (uart_rx_data_valid) begin
+                            rx_delay_value[uart_transmission_counter*8 +: 8] <= uart_rx_data;
+                            uart_transmission_counter <= uart_transmission_counter + 1;
+                        end
+                    end
+                end
+
+                STATE_WAIT_FINE_WIDTH: begin
+                    if (fine_width_configured) begin
+                        current_fine_width <= fine_width_target;
+                        current_state <= STATE_IDLE;
+                    end
+                end
+
+                STATE_GET_FINE_WIDTH: begin
+                    if (uart_transmission_counter >= 4) begin
+                        current_state <= STATE_IDLE;
+                    end else begin
+                        if (uart_tx_ready) begin
+                            case (uart_transmission_counter)
+                                0: uart_tx_data <= current_fine_width[7:0];
+                                1: uart_tx_data <= current_fine_width[15:8];
+                                2: uart_tx_data <= current_fine_width[23:16];
+                                3: uart_tx_data <= current_fine_width[31:24];
+                            endcase
                             uart_tx_en <= 1'b1;
                             uart_transmission_counter <= uart_transmission_counter + 1;
                         end
